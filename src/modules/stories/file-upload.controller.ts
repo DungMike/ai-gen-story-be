@@ -94,9 +94,9 @@ export class FileUploadController {
     // Upload file
     const uploadedFilePath = await this.fileUploadService.uploadFile(file, 'uploads/original');
     
-    // Generate file URL
+    // Generate file URL - now using static file serving
     const baseUrl = process.env.API_BASE_URL || 'http://localhost:3001';
-    const fileUrl = `${baseUrl}/api/files/${uploadedFilePath}`;
+    const fileUrl = `${baseUrl}/${uploadedFilePath}`;
 
     return {
       fileUrl,

@@ -9,7 +9,10 @@ import { UsersModule } from './modules/users/users.module';
 import { ImagesModule } from './modules/images/images.module';
 import { AudioModule } from './modules/audio/audio.module';
 import { SocketModule } from './modules/socket/socket.module';
+import { AiModule } from './services/ai/ai.module';
+
 import { AuthGuard } from './common/guards/auth.guard';
+import { ApiKeyStatsController } from './controllers/api-key-stats.controller';
 import configuration from './config/configuration';
 import { BullModule } from '@nestjs/bullmq';
 
@@ -38,8 +41,9 @@ import { BullModule } from '@nestjs/bullmq';
     ImagesModule,
     AudioModule,
     SocketModule,
+    AiModule,
   ],
-  controllers: [],
+  controllers: [ApiKeyStatsController],
   providers: [
     {
       provide: APP_GUARD,

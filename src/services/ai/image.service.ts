@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
 import { aiConfig } from '@/config/ai.config';
 import { FileStorageService } from '../file/file-storage.service';
+import { APIKeyManagerService } from '../api-key-manager/api-key-manager.service';
 
 export interface ImageGenerationOptions {
   size?: string;
@@ -67,25 +68,28 @@ Return ONLY the safe, rewritten prompt in English, with no other text or explana
 @Injectable()
 export class AIImageService {
   private readonly logger = new Logger(AIImageService.name);
-  private genAI: GoogleGenAI;
-  private model: any;
 
   constructor(
-    private readonly fileStorageService: FileStorageService
-  ) {
-    this.genAI = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+    private readonly fileStorageService: FileStorageService,
+    private readonly apiKeyManager: APIKeyManagerService
+  ) {}
+
+  private async getGeminiClient(): Promise<GoogleGenAI> {
+    return await this.apiKeyManager.createGeminiClient();
   }
 
   /**
    * Generate master prompt from entire story content
    */
   async generateMasterPrompt(storyContent: string, customPrompt: string): Promise<string> {
+    let currentApiKey: string;
     try {
       const prompt = `${MASTER_PROMPT_GENERATION_SYSTEM_INSTRUCTION}\n\nStory content:\n${storyContent}\n\nCustom prompt:\n${customPrompt}`;
       
-      const response = await this.genAI.models.generateContent({
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
         contents: prompt,
       });
@@ -96,6 +100,17 @@ export class AIImageService {
       return masterPrompt;
     } catch (error) {
       this.logger.error('Error generating master prompt:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Master Prompt Error: ${error.message}`);
+      }
+      
       throw new Error(`Failed to generate master prompt: ${error.message}`);
     }
   }
@@ -104,10 +119,14 @@ export class AIImageService {
    * Generate chunk-specific prompt using master prompt
    */
   async generateChunkPrompt(chunkContent: string, masterPrompt: string): Promise<string> {
+    let currentApiKey: string;
     try {
       const prompt = `${PROMPT_GENERATION_SYSTEM_INSTRUCTION}\n\nMaster Prompt: ${masterPrompt}\n\nChunk content:\n${chunkContent}`;
       
-      const response = await this.genAI.models.generateContent({
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
         contents: prompt,
       });
@@ -118,6 +137,17 @@ export class AIImageService {
       return chunkPrompt;
     } catch (error) {
       this.logger.error('Error generating chunk prompt:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Chunk Prompt Error: ${error.message}`);
+      }
+      
       throw new Error(`Failed to generate chunk prompt: ${error.message}`);
     }
   }
@@ -126,10 +156,14 @@ export class AIImageService {
    * Sanitize prompt if it violates safety policies
    */
   async sanitizePrompt(originalPrompt: string): Promise<string> {
+    let currentApiKey: string;
     try {
       const prompt = `${SANITIZE_PROMPT_SYSTEM_INSTRUCTION}\n\nOriginal prompt: ${originalPrompt}`;
       
-      const response = await this.genAI.models.generateContent({
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
         contents: prompt,
       });
@@ -140,6 +174,17 @@ export class AIImageService {
       return sanitizedPrompt;
     } catch (error) {
       this.logger.error('Error sanitizing prompt:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Sanitize Prompt Error: ${error.message}`);
+      }
+      
       throw new Error(`Failed to sanitize prompt: ${error.message}`);
     }
   }
@@ -213,10 +258,14 @@ export class AIImageService {
   }
 
     async generateImageWithGemini(prompt: string, options: ImageGenerationOptions = {}): Promise<ImageGenerationResult> {
+    let currentApiKey: string;
     try {
       const { size = '1024x1024', quality = 'standard', numberOfImages = 1, storyId } = options;
       
-      const response = await this.genAI.models.generateImages({
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateImages({
         model: 'imagen-4.0-generate-preview-06-06',
         prompt: prompt,
         config: {
@@ -278,6 +327,17 @@ export class AIImageService {
        
     } catch (error) {
       this.logger.error('Error generating image with Gemini:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Image Generation Error: ${error.message}`);
+      }
+      
       throw new Error(`Gemini image generation failed: ${error.message}`);
     }
   }

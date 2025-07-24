@@ -31,8 +31,8 @@ export class StoriesService {
     return {
       ...story,
       files: {
-        originalFileUrl: story.files?.originalFile ? `${baseUrl}/api/files/${story.files.originalFile}` : null,
-        generatedFileUrl: story.files?.generatedFile ? `${baseUrl}/api/files/${story.files.generatedFile}` : null,
+            originalFileUrl: story.files?.originalFile ? `${baseUrl}/${story.files.originalFile}` : null,
+    generatedFileUrl: story.files?.generatedFile ? `${baseUrl}/${story.files.generatedFile}` : null,
       }
     };
   }
@@ -73,12 +73,12 @@ export class StoriesService {
       const baseUrl = process.env.API_BASE_URL || 'http://localhost:3001';
       const fileUrl = createStoryDto.fileUrl;
       
-      if (!fileUrl.startsWith(`${baseUrl}/api/files/`)) {
+      if (!fileUrl.startsWith(`${baseUrl}/uploads/`)) {
         throw new Error('Invalid file URL format');
       }
       
       // Extract file path from URL
-      const filePath = fileUrl.replace(`${baseUrl}/api/files/`, '');
+      const filePath = fileUrl.replace(`${baseUrl}/`, '');
       
       // Create story data
       const storyData = {

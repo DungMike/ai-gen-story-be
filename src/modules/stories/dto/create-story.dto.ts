@@ -21,7 +21,7 @@ export class CreateStoryDto {
 
   @ApiProperty({
     description: 'URL of the uploaded story file',
-    example: 'http://localhost:3001/api/files/uploads/original/story.txt'
+    example: 'http://localhost:3001/uploads/original/story.txt'
   })
   @IsString()
   fileUrl: string;

@@ -1,25 +1,31 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
 import { aiConfig } from '@/config/ai.config';
+import { APIKeyManagerService } from '../api-key-manager/api-key-manager.service';
 
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
-  private genAI: GoogleGenAI;
-  private model: any;
-  constructor() {
-    this.genAI = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+
+  constructor(
+    private readonly apiKeyManager: APIKeyManagerService
+  ) {}
+
+  private async getGeminiClient(): Promise<GoogleGenAI> {
+    return await this.apiKeyManager.createGeminiClient();
   }
 
   async generateStory(originalContent: string, customPrompt?: string): Promise<string> {
+    let currentApiKey: string;
     try {
       const prompt = this.buildStoryPrompt(originalContent, customPrompt);
       
       this.logger.log('Generating story with Gemini AI...');
       
-      const response = await this.genAI.models.generateContent({
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateContent({
         model: aiConfig.gemini.model,
         contents: prompt,
       });
@@ -30,15 +36,30 @@ export class GeminiService {
       return generatedContent;
     } catch (error) {
       this.logger.error('Error generating story:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Story Generation Error: ${error.message}`);
+      }
+      
       throw new Error(`Failed to generate story: ${error.message}`);
     }
   }
 
   async generateImage(prompt: string, size: string = '1024x1024'): Promise<string> {
+    let currentApiKey: string;
     try {
       this.logger.log('Generating image with Gemini AI...');
       
-      const response = await this.genAI.models.generateContent({
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateContent({
         model: aiConfig.gemini.model,
         contents: prompt,
       });
@@ -50,6 +71,17 @@ export class GeminiService {
       
     } catch (error) {
       this.logger.error('Error generating image:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Image Generation Error: ${error.message}`);
+      }
+      
       throw new Error(`Failed to generate image: ${error.message}`);
     }
   }

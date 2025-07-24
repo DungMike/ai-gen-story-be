@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { aiConfig } from '@/config/ai.config';
 import { VoiceOption } from '@/modules/audio/constant/type';
 import { GoogleGenAI } from '@google/genai';
+import { APIKeyManagerService } from '../api-key-manager/api-key-manager.service';
 import * as wav from 'wav';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -9,12 +10,13 @@ import * as path from 'path';
 @Injectable()
 export class TTSService {
   private readonly logger = new Logger(TTSService.name);
-  private readonly ai: GoogleGenAI;
 
-  constructor() {
-    this.ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-    });
+  constructor(
+    private readonly apiKeyManager: APIKeyManagerService
+  ) {}
+
+  private async getGeminiClient(): Promise<GoogleGenAI> {
+    return await this.apiKeyManager.createGeminiClient();
   }
 
   async generateAudio(text: string, voiceModel: VoiceOption): Promise<string> {
@@ -29,19 +31,19 @@ export class TTSService {
   }
 
   private async generateGoogleTTS(text: string, voiceModel: VoiceOption): Promise<string> {
+    let currentApiKey: string;
     try {
       // Validate input
       if (!text || text.trim().length === 0) {
         throw new Error('Text input cannot be empty');
       }
 
-
-      console.log("🚀 ~ TTSService ~ generateGoogleTTS ~ aiConfig.gemini.apiKey:", process.env.GEMINI_API_KEY)
-
       this.logger.log('Using Google Gemini TTS');
       this.logger.log('Generating audio ...');
     
       const selectedVoice = voiceModel
+      const ai = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
 
       const prompt = `
       You are a professional voice actor.
@@ -54,7 +56,7 @@ export class TTSService {
       This is the text: ${text}
         `
       // Call Google Gemini TTS API
-      const response = await this.ai.models.generateContent({
+      const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: prompt}] }],
         config: {
@@ -96,6 +98,17 @@ export class TTSService {
       
     } catch (error) {
       this.logger.error('Error in Google Gemini TTS:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `TTS Error: ${error.message}`);
+      }
+      
       throw new Error(`Google Gemini TTS failed: ${error.message}`);
     }
      
