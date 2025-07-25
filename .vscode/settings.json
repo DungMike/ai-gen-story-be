@@ -1,0 +1,32 @@
+{
+    "cSpell.words": [
+      "Injectable",
+      "microservices",
+      "nestjs",
+      "postgres"
+    ],
+    "rift.autostart": false,
+    "i18n-ally.localesPaths": [
+      "src/i18n"
+    ],
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.formatDocument": "explicit",
+      "source.fixAll.eslint": "explicit",
+      "source.removeUnusedImports": "explicit"
+    },
+    "editor.formatOnPaste": false,
+    "[typescript]": {
+      "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+    },
+    // The number of spaces a tab is equal to. This setting is overridden
+    // based on the file contents when `editor.detectIndentation` is true.
+    "editor.tabSize": 2,
+    // Insert spaces when pressing Tab. This setting is overriden
+    // based on the file contents when `editor.detectIndentation` is true.
+    "editor.insertSpaces": true,
+    // When opening a file, `editor.tabSize` and `editor.insertSpaces`
+    // will be detected based on the file contents. Set to false to keep
+    // the values you've explicitly set, above.
+    "editor.detectIndentation": false
+  }

@@ -32,8 +32,7 @@ export class APIKeyManagerService implements OnModuleInit {
       lastUsed: 0,
       requestCount: 0,
       isHealthy: true
-    }));
-
+    }));   
     this.logger.log(`Initialized ${this.apiKeys.length} API keys for rotation`);
   }
 
