@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { aiConfig } from '@/config/ai.config';
 import { VoiceOption } from '@/modules/audio/constant/type';
 import { GoogleGenAI } from '@google/genai';
 import { APIKeyManagerService } from '../api-key-manager/api-key-manager.service';
@@ -43,7 +42,8 @@ export class TTSService {
     
       const selectedVoice = voiceModel
       const ai = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (ai as any).apiKey;
 
       const prompt = `
       You are a professional voice actor.

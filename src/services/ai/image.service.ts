@@ -86,7 +86,8 @@ export class AIImageService {
       const prompt = `${MASTER_PROMPT_GENERATION_SYSTEM_INSTRUCTION}\n\nStory content:\n${storyContent}\n\nCustom prompt:\n${customPrompt}`;
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -123,7 +124,8 @@ export class AIImageService {
       const prompt = `${PROMPT_GENERATION_SYSTEM_INSTRUCTION}\n\nMaster Prompt: ${masterPrompt}\n\nChunk content:\n${chunkContent}`;
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -160,7 +162,8 @@ export class AIImageService {
       const prompt = `${SANITIZE_PROMPT_SYSTEM_INSTRUCTION}\n\nOriginal prompt: ${originalPrompt}`;
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -175,12 +178,7 @@ export class AIImageService {
       this.logger.error('Error sanitizing prompt:', error);
       
       // Mark API key as unhealthy if it's a rate limit or quota error
-      if (currentApiKey && (
-        error.message.includes('quota') || 
-        error.message.includes('rate') ||
-        error.message.includes('limit') ||
-        error.message.includes('429')
-      )) {
+      if (currentApiKey) {
         this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Sanitize Prompt Error: ${error.message}`);
       }
       
@@ -213,7 +211,8 @@ Return ONLY the simplified prompt in English, with no other text or explanations
       const prompt = `${SIMPLIFY_PROMPT_SYSTEM_INSTRUCTION}\n\nOriginal prompt: ${originalPrompt}`;
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateContent({
         model: 'gemini-2.0-flash-001',
@@ -372,7 +371,8 @@ Return ONLY the simplified prompt in English, with no other text or explanations
       const { size = '1024x1024', quality = 'standard', numberOfImages = 1, storyId } = options;
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateImages({
         model: 'imagen-4.0-generate-preview-06-06',

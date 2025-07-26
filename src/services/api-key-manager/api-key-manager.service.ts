@@ -71,10 +71,13 @@ export class APIKeyManagerService implements OnModuleInit {
         keyInfo.lastUsed = now;
         keyInfo.requestCount++;
         
+        // Log the current key index before moving to next
+        const currentIndex = this.currentKeyIndex;
+        
         // Move to next key for round-robin
         this.currentKeyIndex = (this.currentKeyIndex + 1) % this.apiKeys.length;
         
-        this.logger.debug(`Using API key ${this.currentKeyIndex} (${keyInfo.requestCount} requests)`);
+        this.logger.debug(`Using API key ${currentIndex + 1} (${keyInfo.requestCount} requests)`);
         return keyInfo.key;
       }
 
@@ -95,6 +98,10 @@ export class APIKeyManagerService implements OnModuleInit {
     bestKey.lastUsed = Date.now();
     bestKey.requestCount++;
     
+    // Find the index of the best key for logging
+    const bestKeyIndex = this.apiKeys.findIndex(k => k.key === bestKey.key);
+    this.logger.debug(`Using API key ${bestKeyIndex + 1} (${bestKey.requestCount} requests) - after waiting`);
+    
     return bestKey.key;
   }
 
@@ -112,11 +119,18 @@ export class APIKeyManagerService implements OnModuleInit {
   }
 
   private findBestAvailableKey(): APIKeyInfo {
-    return this.apiKeys
-      .filter(key => key.isHealthy)
-      .reduce((best, current) => 
-        current.lastUsed < best.lastUsed ? current : best
-      );
+    const healthyKeys = this.apiKeys.filter(key => key.isHealthy);
+    if (healthyKeys.length === 0) {
+      // If no healthy keys, return the first one and reset it
+      const firstKey = this.apiKeys[0];
+      firstKey.isHealthy = true;
+      firstKey.lastUsed = 0;
+      return firstKey;
+    }
+    
+    return healthyKeys.reduce((best, current) => 
+      current.lastUsed < best.lastUsed ? current : best
+    );
   }
 
   /**
@@ -124,7 +138,10 @@ export class APIKeyManagerService implements OnModuleInit {
    */
   async createGeminiClient(): Promise<GoogleGenAI> {
     const apiKey = await this.getNextAPIKey();
-    return new GoogleGenAI({ apiKey });
+    const client = new GoogleGenAI({ apiKey });
+    // Expose the API key for error handling
+    (client as any).apiKey = apiKey;
+    return client;
   }
 
   /**
@@ -154,13 +171,28 @@ export class APIKeyManagerService implements OnModuleInit {
       healthyKeys: this.apiKeys.filter(k => k.isHealthy).length,
       currentKeyIndex: this.currentKeyIndex,
       keyStats: this.apiKeys.map((key, index) => ({
-        index,
+        index: index + 1, // 1-based indexing for user-friendly display
         requestCount: key.requestCount,
         lastUsed: new Date(key.lastUsed).toISOString(),
         isHealthy: key.isHealthy,
-        keyPreview: `${key.key.substring(0, 8)}...`
+        keyPreview: `${key.key.substring(0, 8)}...`,
+        timeSinceLastUse: Date.now() - key.lastUsed
       }))
     };
+  }
+
+  /**
+   * Get the current key index (for debugging)
+   */
+  getCurrentKeyIndex(): number {
+    return this.currentKeyIndex;
+  }
+
+  /**
+   * Get the next key index that will be used
+   */
+  getNextKeyIndex(): number {
+    return (this.currentKeyIndex + 1) % this.apiKeys.length;
   }
 
   /**

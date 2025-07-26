@@ -23,7 +23,8 @@ export class GeminiService {
       this.logger.log('Generating story with Gemini AI...');
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateContent({
         model: aiConfig.gemini.model,
@@ -57,7 +58,8 @@ export class GeminiService {
       this.logger.log('Generating image with Gemini AI...');
       
       const genAI = await this.getGeminiClient();
-      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      // Get the API key from the client for error handling
+      currentApiKey = (genAI as any).apiKey;
       
       const response = await genAI.models.generateContent({
         model: aiConfig.gemini.model,
