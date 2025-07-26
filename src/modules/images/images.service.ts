@@ -3,8 +3,6 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { ImageChunkRepository } from './repositories/image-chunk.repository';
 import { ImageGateway } from '../socket/image.gateway';
-import { CreateImageChunkDto } from './dto/create-image-chunk.dto';
-import { UpdateImageChunkDto } from './dto/update-image-chunk.dto';
 import { ImageChunkResponseDto, ImageProcessingResponseDto } from './dto/image-response.dto';
 import { AIImageService } from '../../services/ai/image.service';
 import { FileStorageService } from '../../services/file/file-storage.service';
@@ -83,6 +81,7 @@ export class ImagesService {
       }
 
       // Default configuration
+      console.log("🚀 ~ ImagesService ~ generateImages ~ generateImagesDto.maxWordsPerChunk:", generateImagesDto.maxWordsPerChunk)
       const config = {
         artStyle: 'realistic',
         imageSize: '1024x1024',
@@ -181,12 +180,12 @@ export class ImagesService {
           // Truncate content if too long for database
           const truncatedContent = chunk.length > 5000 ? chunk.substring(0, 5000) + '...' : chunk;
           
-          // Create failed record
+          // Create failed record with a placeholder image path to satisfy validation
           await this.imageChunkRepository.create({
             storyId,
             chunkIndex: i,
             content: truncatedContent,
-            imageFile: '',
+            imageFile: 'failed_generation', // Use placeholder to satisfy required field
             prompt: `Failed to generate prompt for chunk ${i}`,
             status: 'failed',
             style: { artStyle },
@@ -195,7 +194,7 @@ export class ImagesService {
               imageSize,
               processingTime: 0,
               quality,
-              error: error.message
+              error: `Failed after 3 retry attempts: ${error.message}`
             }
           });
 
@@ -302,6 +301,7 @@ export class ImagesService {
         // Generate new chunk prompt using master prompt
         const chunkPrompt = await this.aiImageService.generateChunkPrompt(failedImage.content, masterPrompt);
         
+        // Use enhanced retry logic from AI service
         const imageResult = await this.aiImageService.generateImages(chunkPrompt, {
           size: failedImage.metadata.imageSize,
           quality: failedImage.metadata.quality,
@@ -333,11 +333,11 @@ export class ImagesService {
       } catch (error) {
         console.error(`Error retrying image chunk ${failedImage.chunkIndex}:`, error);
         
-        // Update failed record with error
+        // Update failed record with error and mark as failed after retries
         await this.imageChunkRepository.update(failedImage._id.toString(), {
           metadata: {
             ...failedImage.metadata,
-            error: error.message
+            error: `Retry failed after 3 attempts: ${error.message}`
           }
         });
       }

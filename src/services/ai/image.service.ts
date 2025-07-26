@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
-import { aiConfig } from '@/config/ai.config';
 import { FileStorageService } from '../file/file-storage.service';
 import { APIKeyManagerService } from '../api-key-manager/api-key-manager.service';
 
@@ -190,7 +189,85 @@ export class AIImageService {
   }
 
   /**
-   * Generate image with retry logic for policy violations
+   * Simplify prompt by removing complex elements that might cause generation issues
+   */
+  async simplifyPrompt(originalPrompt: string): Promise<string> {
+    let currentApiKey: string;
+    try {
+      const SIMPLIFY_PROMPT_SYSTEM_INSTRUCTION = `
+You are an AI assistant that simplifies image generation prompts to make them more likely to generate successfully.
+You will be given a prompt that failed to generate an image.
+Your task is to create a simpler, more basic version that focuses on the core visual elements while removing complex details that might cause generation issues.
+
+Guidelines:
+1. Keep the main subject and action
+2. Remove complex technical terms, camera specifications, or artistic jargon
+3. Simplify lighting and atmosphere descriptions
+4. Focus on basic visual elements: subject, action, setting
+5. Use simple, clear language
+6. Keep it under 100 words
+
+Return ONLY the simplified prompt in English, with no other text or explanations.
+`;
+
+      const prompt = `${SIMPLIFY_PROMPT_SYSTEM_INSTRUCTION}\n\nOriginal prompt: ${originalPrompt}`;
+      
+      const genAI = await this.getGeminiClient();
+      currentApiKey = await this.apiKeyManager.getNextAPIKey();
+      
+      const response = await genAI.models.generateContent({
+        model: 'gemini-2.0-flash-001',
+        contents: prompt,
+      });
+      
+      const simplifiedPrompt = response.text.trim();
+      
+      this.logger.log(`Simplified prompt: ${simplifiedPrompt.substring(0, 100)}...`);
+      return simplifiedPrompt;
+    } catch (error) {
+      this.logger.error('Error simplifying prompt:', error);
+      
+      // Mark API key as unhealthy if it's a rate limit or quota error
+      if (currentApiKey && (
+        error.message.includes('quota') || 
+        error.message.includes('rate') ||
+        error.message.includes('limit') ||
+        error.message.includes('429')
+      )) {
+        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `Simplify Prompt Error: ${error.message}`);
+      }
+      
+      // If simplification fails, return a very basic version of the original prompt
+      this.logger.warn('Prompt simplification failed, using fallback basic prompt');
+      return this.createBasicFallbackPrompt(originalPrompt);
+    }
+  }
+
+  /**
+   * Create a basic fallback prompt when all AI-based prompt modifications fail
+   */
+  private createBasicFallbackPrompt(originalPrompt: string): string {
+    // Extract basic elements from the original prompt
+    const words = originalPrompt.split(' ');
+    const basicWords = words.filter(word => 
+      word.length > 2 && 
+      !word.includes('(') && 
+      !word.includes(')') && 
+      !word.includes('—') &&
+      !word.includes('Arri') &&
+      !word.includes('Zeiss') &&
+      !word.includes('Supreme') &&
+      !word.includes('Primes')
+    );
+    
+    // Take first 20 words and create a simple prompt
+    const basicPrompt = basicWords.slice(0, 20).join(' ');
+    return `A simple image of ${basicPrompt}`;
+  }
+
+  /**
+   * Generate image with enhanced retry logic
+   * Tries up to 3 times with different prompt strategies regardless of error message
    */
   async generateImage(prompt: string, options: ImageGenerationOptions = {}): Promise<Buffer> {
     const {
@@ -200,32 +277,49 @@ export class AIImageService {
       numberOfImages = 1
     } = options;
 
+    const maxRetries = 3;
+    let lastError: Error;
+
+    // Strategy 1: Original prompt
     try {
-      // First attempt with original prompt
+      this.logger.log('Attempt 1: Using original prompt');
       const result = await this.generateImageWithGemini(prompt, options);
       return result.images[0]; // Return first image for backward compatibility
     } catch (error) {
-      this.logger.warn(`Image generation failed with original prompt: ${error.message}`);
-      
-      // If it's a policy violation, try sanitizing the prompt
-      if (error.message.includes('policy') || error.message.includes('safety') || error.message.includes('violation')) {
-        try {
-          const sanitizedPrompt = await this.sanitizePrompt(prompt);
-          this.logger.log('Retrying with sanitized prompt');
-          const result = await this.generateImageWithGemini(sanitizedPrompt, options);
-          return result.images[0]; // Return first image for backward compatibility
-        } catch (sanitizeError) {
-          this.logger.error('Image generation failed even with sanitized prompt:', sanitizeError);
-          throw sanitizeError;
-        }
-      }
-      
-      throw error;
+      lastError = error;
+      this.logger.warn(`Attempt 1 failed: ${error.message}`);
     }
+
+    // Strategy 2: Sanitized prompt (for policy violations)
+    try {
+      this.logger.log('Attempt 2: Using sanitized prompt');
+      const sanitizedPrompt = await this.sanitizePrompt(prompt);
+      const result = await this.generateImageWithGemini(sanitizedPrompt, options);
+      return result.images[0]; // Return first image for backward compatibility
+    } catch (error) {
+      lastError = error;
+      this.logger.warn(`Attempt 2 failed: ${error.message}`);
+    }
+
+    // Strategy 3: Simplified prompt (remove complex elements)
+    try {
+      this.logger.log('Attempt 3: Using simplified prompt');
+      const simplifiedPrompt = await this.simplifyPrompt(prompt);
+      const result = await this.generateImageWithGemini(simplifiedPrompt, options);
+      return result.images[0]; // Return first image for backward compatibility
+    } catch (error) {
+      lastError = error;
+      this.logger.warn(`Attempt 3 failed: ${error.message}`);
+    }
+
+    // All attempts failed
+    this.logger.error(`All ${maxRetries} attempts failed for prompt generation`);
+    throw lastError || new Error('All retry attempts failed');
   }
 
   /**
-   * Generate multiple images with retry logic for policy violations
+   * Generate multiple images with enhanced retry logic
+   * Tries up to 3 times with different prompt strategies regardless of error message
    */
   async generateImages(prompt: string, options: ImageGenerationOptions = {}): Promise<ImageGenerationResult> {
     const {
@@ -235,26 +329,41 @@ export class AIImageService {
       numberOfImages = 1
     } = options;
 
+    const maxRetries = 3;
+    let lastError: Error;
+
+    // Strategy 1: Original prompt
     try {
-      // First attempt with original prompt
+      this.logger.log('Attempt 1: Using original prompt');
       return await this.generateImageWithGemini(prompt, options);
     } catch (error) {
-      this.logger.warn(`Image generation failed with original prompt: ${error.message}`);
-      
-      // If it's a policy violation, try sanitizing the prompt
-      if (error.message.includes('policy') || error.message.includes('safety') || error.message.includes('violation')) {
-        try {
-          const sanitizedPrompt = await this.sanitizePrompt(prompt);
-          this.logger.log('Retrying with sanitized prompt');
-          return await this.generateImageWithGemini(sanitizedPrompt, options);
-        } catch (sanitizeError) {
-          this.logger.error('Image generation failed even with sanitized prompt:', sanitizeError);
-          throw sanitizeError;
-        }
-      }
-      
-      throw error;
+      lastError = error;
+      this.logger.warn(`Attempt 1 failed: ${error.message}`);
     }
+
+    // Strategy 2: Sanitized prompt (for policy violations)
+    try {
+      this.logger.log('Attempt 2: Using sanitized prompt');
+      const sanitizedPrompt = await this.sanitizePrompt(prompt);
+      return await this.generateImageWithGemini(sanitizedPrompt, options);
+    } catch (error) {
+      lastError = error;
+      this.logger.warn(`Attempt 2 failed: ${error.message}`);
+    }
+
+    // Strategy 3: Simplified prompt (remove complex elements)
+    try {
+      this.logger.log('Attempt 3: Using simplified prompt');
+      const simplifiedPrompt = await this.simplifyPrompt(prompt);
+      return await this.generateImageWithGemini(simplifiedPrompt, options);
+    } catch (error) {
+      lastError = error;
+      this.logger.warn(`Attempt 3 failed: ${error.message}`);
+    }
+
+    // All attempts failed
+    this.logger.error(`All ${maxRetries} attempts failed for prompt generation`);
+    throw lastError || new Error('All retry attempts failed');
   }
 
     async generateImageWithGemini(prompt: string, options: ImageGenerationOptions = {}): Promise<ImageGenerationResult> {
