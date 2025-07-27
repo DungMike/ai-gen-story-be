@@ -1,19 +1,28 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { AudioChunkRepository } from './repositories/audio-chunk.repository';
-import { CreateAudioChunkDto } from './dto/create-audio-chunk.dto';
-import { UpdateAudioChunkDto } from './dto/update-audio-chunk.dto';
-import { AudioGenerationResponseDto, AudioGenerationStatusResponseDto, AudioDownloadResponseDto } from './dto/audio-response.dto';
-import { AudioGenerationStatus } from './dto/audio-events.dto';
+import { AudioGateway } from './audio.gateway';
 import { TTSService } from '../../services/ai/tts.service';
 import { FileStorageService } from '../../services/file/file-storage.service';
 import { ZipHelper } from '../../helpers/zip.helper';
-import { AudioGateway } from './audio.gateway';
 import { StoryRepository } from '../../database/repositories/story.repository';
+import { CreateAudioChunkDto } from './dto/create-audio-chunk.dto';
+import { UpdateAudioChunkDto } from './dto/update-audio-chunk.dto';
+import { AudioGenerationResponseDto, AudioGenerationStatusResponseDto, AudioDownloadResponseDto } from './dto/audio-response.dto';
+import { VoiceOption } from './constant/type';
+import { AudioFormat } from './constant/type';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AudioFormat, VoiceOption } from './constant/type';
+import { AudioMergerService } from '../../services/audio/audio-merger.service';
+
+// Define AudioGenerationStatus enum locally since it's not exported
+enum AudioGenerationStatus {
+  PENDING = 'pending',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  FAILED = 'failed'
+}
 
 @Injectable()
 export class AudioService {
@@ -27,6 +36,8 @@ export class AudioService {
     private readonly zipHelper: ZipHelper,
     private readonly audioGateway: AudioGateway,
     private readonly storyRepository: StoryRepository,
+    @InjectQueue('audio-merge') private readonly audioMergeQueue: Queue,
+    private readonly audioMergerService: AudioMergerService,
   ) {}
 
   // New method to enqueue audio generation job
@@ -270,7 +281,7 @@ export class AudioService {
       const fileSize = fileStats.size;
 
       // Generate download URL
-      const downloadUrl = `/api/audio/download/${path.basename(zipFilePath)}`;
+      const downloadUrl = `/uploads/temp/${path.basename(zipFilePath)}`;
 
       // Clean up temp directory
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -387,6 +398,117 @@ export class AudioService {
       );
 
       throw error;
+    }
+  }
+
+
+
+  async downloadMergedAudio(storyId: string): Promise<AudioDownloadResponseDto> {
+    try {
+      // First check if merged file already exists
+      const mergeMetadata = await this.audioChunkRepository.getMergeMetadata(storyId);
+      
+      if (mergeMetadata && mergeMetadata.mergedFilePath && fs.existsSync(mergeMetadata.mergedFilePath)) {
+        // Merged file exists, return it
+        const filePath = mergeMetadata.mergedFilePath;
+        const fileName = `story_${storyId}_merged_audio_${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
+        const fileSize = fs.statSync(filePath).size;
+        const downloadUrl = `/api/audio/download/${path.basename(filePath)}`;
+
+        return {
+          success: true,
+          message: 'Merged audio file downloaded successfully',
+          data: {
+            downloadUrl,
+            fileName,
+            fileSize,
+            totalDuration: mergeMetadata.totalDuration || 0,
+          },
+        };
+      }
+
+      // Check if all audio chunks are completed and ready for merge
+      const isReadyForMerge = await this.audioChunkRepository.isReadyForMerge(storyId);
+      if (!isReadyForMerge) {
+        throw new BadRequestException('Not all audio chunks are completed. Cannot merge audio files.');
+      }
+
+      // Get all completed audio chunks in order
+      const completedChunks = await this.audioChunkRepository.findCompletedByStoryId(storyId);
+      if (completedChunks.length === 0) {
+        throw new BadRequestException('No completed audio chunks found for merge');
+      }
+
+      // Sort chunks by chunkIndex to ensure correct order
+      completedChunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
+
+      // Get all audio file paths
+      const audioFiles = completedChunks
+        .map(chunk => chunk.audioFile)
+        .filter(filePath => filePath && fs.existsSync(filePath));
+
+      if (audioFiles.length === 0) {
+        throw new BadRequestException('No valid audio files found for merge');
+      }
+
+      // Merge audio files
+      this.logger.log(`Starting audio merge for story ${storyId} with ${audioFiles.length} files`);
+      
+      const mergeResult = await this.audioMergerService.mergeAudioFiles(audioFiles, storyId);
+
+      // Update merge metadata in database
+      await this.audioChunkRepository.updateMergeMetadata(storyId, {
+        mergedFilePath: mergeResult.outputPath,
+        totalDuration: mergeResult.totalDuration,
+        fileSize: mergeResult.fileSize,
+        chunkCount: audioFiles.length,
+        mergedAt: new Date(),
+        jobId: 'auto-merge'
+      });
+
+      // Return the merged file
+      const fileName = `story_${storyId}_merged_audio_${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
+      const downloadUrl = `/uploads/audio/${storyId}/merged/${path.basename(mergeResult.outputPath)}`;
+
+      return {
+        success: true,
+        message: 'Audio files merged and downloaded successfully',
+        data: {
+          downloadUrl,
+          fileName,
+          fileSize: mergeResult.fileSize,
+          totalDuration: mergeResult.totalDuration,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`Error downloading merged audio for story ${storyId}:`, error);
+      throw new BadRequestException(`Failed to download merged audio: ${error.message}`);
+    }
+  }
+
+  async deleteMergedAudio(storyId: string): Promise<void> {
+    try {
+      // Get merge metadata to find the merged file
+      const mergeMetadata = await this.audioChunkRepository.getMergeMetadata(storyId);
+      
+      if (mergeMetadata && mergeMetadata.mergedFilePath && fs.existsSync(mergeMetadata.mergedFilePath)) {
+        fs.unlinkSync(mergeMetadata.mergedFilePath);
+      }
+
+      // Clear merge metadata
+      await this.audioChunkRepository.updateMergeMetadata(storyId, {
+        mergedFilePath: '',
+        totalDuration: 0,
+        fileSize: 0,
+        chunkCount: 0,
+        mergedAt: new Date(),
+        jobId: ''
+      });
+      
+      this.logger.log(`Deleted merged audio for story ${storyId}`);
+    } catch (error) {
+      this.logger.error(`Error deleting merged audio for story ${storyId}:`, error);
+      throw new BadRequestException(`Failed to delete merged audio: ${error.message}`);
     }
   }
 } 

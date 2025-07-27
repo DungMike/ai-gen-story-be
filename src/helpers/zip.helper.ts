@@ -41,7 +41,7 @@ export class ZipHelper {
   ): Promise<{ zipPath: string; filename: string }> {
     try {
       // Create temp directory for ZIP file
-      const tempDir = path.join(process.cwd(), 'temp');
+      const tempDir = path.join(process.cwd(),'uploads', 'temp');
       if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });
       }

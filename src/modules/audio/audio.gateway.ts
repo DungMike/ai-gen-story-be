@@ -1,22 +1,22 @@
 import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  OnGatewayConnection,
-  OnGatewayDisconnect,
+    WebSocketGateway,
+    WebSocketServer,
+    SubscribeMessage,
+    OnGatewayConnection,
+    OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { AudioChunkRepository } from './repositories/audio-chunk.repository';
 import {
-  AudioEventType,
-  AudioGenerationStatus,
-  AudioRoomPayloadDto,
-  AudioStatusResponseDto,
-  AudioGenerationProgressDto,
-  AudioGenerationCompletedDto,
-  AudioGenerationFailedDto,
-  AudioStatusErrorDto,
+    AudioEventType,
+    AudioGenerationStatus,
+    AudioRoomPayloadDto,
+    AudioStatusResponseDto,
+    AudioGenerationProgressDto,
+    AudioGenerationCompletedDto,
+    AudioGenerationFailedDto,
+    AudioStatusErrorDto,
 } from './dto/audio-events.dto';
 
 /**
@@ -330,5 +330,42 @@ export class AudioGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   getConnectedClients(storyId: string): Set<string> {
     return this.connectedClients.get(storyId) || new Set();
+  }
+
+  emitAudioGenerationComplete(storyId: string, data: any): void {
+    this.server.to(`audio-${storyId}`).emit('audio:generation:complete', data);
+  }
+
+  emitAudioGenerationError(storyId: string, data: any): void {
+    this.server.to(`audio-${storyId}`).emit('audio:generation:error', data);
+  }
+
+  // Audio Merge Events
+  emitAudioMergeProgress(storyId: string, data: {
+    storyId: string;
+    progress: number;
+    message: string;
+    jobId: string;
+  }): void {
+    this.server.to(`audio-${storyId}`).emit('audio:merge:progress', data);
+  }
+
+  emitAudioMergeComplete(storyId: string, data: {
+    storyId: string;
+    outputPath: string;
+    totalDuration: number;
+    fileSize: number;
+    chunkCount: number;
+    jobId: string;
+  }): void {
+    this.server.to(`audio-${storyId}`).emit('audio:merge:complete', data);
+  }
+
+  emitAudioMergeError(storyId: string, data: {
+    storyId: string;
+    error: string;
+    jobId: string;
+  }): void {
+    this.server.to(`audio-${storyId}`).emit('audio:merge:error', data);
   }
 } 

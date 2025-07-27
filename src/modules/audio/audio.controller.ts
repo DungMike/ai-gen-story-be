@@ -4,23 +4,15 @@ import {
   Post,
   Delete,
   Param,
-  Body,
-  UseGuards,
-  Query,
-  Res,
-  HttpStatus,
-  HttpException
+  Body
 } from '@nestjs/common';
-import { Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AudioService } from './audio.service';
-import { AudioChunkResponseDto, AudioGenerationResponseDto, AudioGenerationStatusResponseDto, AudioDownloadResponseDto, VoiceOptionsResponseDto } from './dto/audio-response.dto';
-import { CreateAudioChunkDto } from './dto/create-audio-chunk.dto';
+import { AudioChunkResponseDto, AudioGenerationStatusResponseDto, AudioDownloadResponseDto } from './dto/audio-response.dto';
 import { AudioGenerateDto } from './dto/audio-generate.dto';
 import { ZipHelper } from '../../helpers/zip.helper';
-import { VoiceOption } from './constant/type';
 
 @ApiTags('Audio')
 @Controller('audio')
@@ -100,53 +92,49 @@ export class AudioController {
     return this.audioService.getAudioGenerationStatus(storyId);
   }
 
-  // @Post('retry/:storyId')
-  // @Auth()
-  // @ApiOperation({ summary: 'Retry failed audio chunks for a story' })
-  // @ApiParam({ name: 'storyId', description: 'Story ID' })
-  // @ApiResponse({ status: 200, description: 'Retry started successfully' })
-  // @ApiResponse({ status: 400, description: 'Bad request' })
-  // async retryFailedAudioChunks(
-  //   @Param('storyId') storyId: string,
-  //   @CurrentUser() user: any
-  // ): Promise<AudioGenerationResponseDto> {
-  //   return this.audioService.retryFailedAudioChunks(storyId);
-  // }
-
   @Get('download/:storyId')
   @Auth()
-  @ApiOperation({ summary: 'Download all audio files for a story as ZIP' })
+  @ApiOperation({ summary: 'Download all audio chunks as ZIP file for a story' })
   @ApiParam({ name: 'storyId', description: 'Story ID' })
   @ApiResponse({ status: 200, description: 'Audio files downloaded successfully' })
   @ApiResponse({ status: 404, description: 'Story not found' })
-  @ApiResponse({ status: 400, description: 'No audio files found for this story' })
+  @ApiResponse({ status: 400, description: 'No audio files found' })
   async downloadAudioFiles(
     @Param('storyId') storyId: string,
-    @Res() res: Response,
     @CurrentUser() user: any
-  ): Promise<void> {
-    try {
-      const result = await this.audioService.downloadAudioFiles(storyId);
-      
-      // Set headers for file download
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="${result.data.fileName}"`);
-      
-      // Stream the file to the response
-      const fileStream = require('fs').createReadStream(result.data.downloadUrl.replace('/api/audio/download/', 'temp/'));
-      fileStream.pipe(res);
-      
-      // Clean up the temp file after streaming
-      fileStream.on('end', () => {
-        this.zipHelper.cleanupZipFile(result.data.downloadUrl.replace('/api/audio/download/', 'temp/'));
-      });
-      
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new HttpException('Failed to download audio files', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
+  ): Promise<AudioDownloadResponseDto> {
+    return this.audioService.downloadAudioFiles(storyId);
+  }
+
+  @Get('merge/download/:storyId')
+  @Auth()
+  @ApiOperation({ summary: 'Download merged audio file for a story (auto-merge if needed)' })
+  @ApiParam({ name: 'storyId', description: 'Story ID' })
+  @ApiResponse({ status: 200, description: 'Merged audio file downloaded successfully' })
+  @ApiResponse({ status: 404, description: 'Story not found' })
+  @ApiResponse({ status: 400, description: 'No audio chunks found or merge failed' })
+  async downloadMergedAudio(
+    @Param('storyId') storyId: string,
+    @CurrentUser() user: any
+  ): Promise<AudioDownloadResponseDto> {
+    return this.audioService.downloadMergedAudio(storyId);
+  }
+
+  @Delete('merge/:storyId')
+  @Auth()
+  @ApiOperation({ summary: 'Delete merged audio file for a story' })
+  @ApiParam({ name: 'storyId', description: 'Story ID' })
+  @ApiResponse({ status: 200, description: 'Merged audio file deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Story not found' })
+  async deleteMergedAudio(
+    @Param('storyId') storyId: string,
+    @CurrentUser() user: any
+  ): Promise<{ success: boolean; message: string }> {
+    await this.audioService.deleteMergedAudio(storyId);
+    return {
+      success: true,
+      message: 'Merged audio file deleted successfully'
+    };
   }
 
   @Delete(':id')
