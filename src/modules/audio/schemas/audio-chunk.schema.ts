@@ -18,9 +18,6 @@ export class AudioChunk {
   @Prop({ required: true })
   audioFile: string;
 
-  @Prop({ required: true, maxlength: 10000 })
-  text: string;
-
   @Prop({
     type: String,
     enum: ['pending', 'processing', 'completed', 'failed'],
@@ -28,24 +25,6 @@ export class AudioChunk {
   })
   status: string;
 
-  @Prop({
-    type: {
-      voiceModel: {
-        type: String,
-        enum: ['google-tts', 'elevenlabs'],
-        default: 'google-tts'
-      },
-      voiceStyle: {
-        type: String,
-        enum: ['neutral', 'narrative', 'dramatic', 'calm', 'energetic'],
-        default: 'neutral'
-      }
-    }
-  })
-  style: {
-    voiceModel: string;
-    voiceStyle: string;
-  };
 
   @Prop({
     type: {

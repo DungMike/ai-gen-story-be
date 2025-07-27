@@ -74,9 +74,6 @@ export class CreateAudioChunkDto {
   @IsString()
   audioFile: string;
 
-  @IsString()
-  @MaxLength(1000)
-  text: string;
 
   @IsOptional()
   @IsEnum(['pending', 'processing', 'completed', 'failed'])

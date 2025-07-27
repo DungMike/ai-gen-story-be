@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class GenerateImagesDto {
   @IsString()
@@ -21,6 +21,6 @@ export class GenerateImagesDto {
   @IsOptional()
   @Transform(({ value }) => parseInt(value))
   @Min(100)
-  @Max(5000)
+  @Max(10000)
   maxWordsPerChunk?: number;
 }
