@@ -195,4 +195,30 @@ export class AudioChunkRepository {
       )
       .exec();
   }
+
+  /**
+   * Update all fields of an audio chunk in a single operation
+   * This replaces multiple separate update calls for better performance
+   */
+  async updateAudioChunkComplete(
+    storyId: string,
+    chunkIndex: number,
+    updateData: {
+      audioFile?: string;
+      status?: string;
+      metadata?: any;
+      style?: any;
+    },
+  ): Promise<AudioChunk> {
+    return this.audioChunkModel
+      .findOneAndUpdate(
+        {
+          storyId: new Types.ObjectId(storyId),
+          chunkIndex: chunkIndex,
+        },
+        { $set: updateData },
+        { new: true },
+      )
+      .exec();
+  }
 } 

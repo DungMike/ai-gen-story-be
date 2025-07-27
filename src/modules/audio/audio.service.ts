@@ -4,7 +4,7 @@ import { Queue } from 'bull';
 import { AudioChunkRepository } from './repositories/audio-chunk.repository';
 import { CreateAudioChunkDto } from './dto/create-audio-chunk.dto';
 import { UpdateAudioChunkDto } from './dto/update-audio-chunk.dto';
-import { AudioGenerationResponseDto, AudioGenerationStatusResponseDto, AudioDownloadResponseDto, VoiceOptionsResponseDto } from './dto/audio-response.dto';
+import { AudioGenerationResponseDto, AudioGenerationStatusResponseDto, AudioDownloadResponseDto } from './dto/audio-response.dto';
 import { AudioGenerationStatus } from './dto/audio-events.dto';
 import { TTSService } from '../../services/ai/tts.service';
 import { FileStorageService } from '../../services/file/file-storage.service';
@@ -122,34 +122,25 @@ export class AudioService {
 
       // Split story content into chunks
       const textChunks = await this.ttsService.splitTextIntoChunks(story.generatedContent, wordPerChunk);
+      this.logger.log(`Text chunks: ${textChunks.length}`);
 
       // Create audio chunk records
-      const audioChunks = [];
-      // for (let i = 0; i < textChunks.length; i++) {
-      for(let i = 0; i < 1; i++) {
-        const chunk = textChunks[i];
-        
-        // const voiceCharacteristics = this.voiceCharacteristics[voiceStyle];
-        
-
-        
-        const audioChunk = await this.generateAudioChunk(storyId, i, chunk, voiceStyle);
-        // const audioChunk = await this.audioChunkRepository.findByStoryIdAndChunkIndex(storyId, i);
-        audioChunks.push(audioChunk);
+      for (let i = 0; i < textChunks.length; i++) {
+        const chunk = textChunks[i];        
+        await this.generateAudioChunk(storyId, i, chunk, voiceStyle);
       }
 
       // Notify clients about the start of audio generation
       await this.audioGateway.notifyAudioGenerationStatus(storyId);
 
+      // Update story status
+      await this.storyRepository.update(storyId, {
+        status: { storyGenerated: true, audioGenerated: true, imagesGenerated: true }
+      });
+
       return {
         success: true,
-        message: `Audio generation started for ${textChunks.length} chunks`,
-        data: {
-          audioChunks: audioChunks as any,
-          totalChunks: textChunks.length,
-          completedChunks: 0,
-          failedChunks: 0,
-        },
+        message: `Audio generation started for ${textChunks.length} chunks`
       };
     } catch (error) {
       this.logger.error(`Error starting audio generation for story ${storyId}:`, error);
@@ -329,28 +320,13 @@ export class AudioService {
     return audioChunk;
   }
 
-  // async getVoiceOptions(): Promise<VoiceOptionsResponseDto> {
-  //   const voiceOptions = Object.entries(this.voiceCharacteristics).map(([voice, characteristics]) => ({
-  //     voice,
-  //     ...characteristics,
-  //     description: `${characteristics.style} voice with ${characteristics.tone} tone`
-  //   }));
-
-  //   return {
-  //     success: true,
-  //     message: 'Voice options retrieved successfully',
-  //     data: {
-  //       voices: voiceOptions,
-  //       totalVoices: voiceOptions.length
-  //     }
-  //   };
-  // }
 
   async generateAudioChunk(
     storyId: string,
     chunkIndex: number,
     text: string,
     voiceStyle: VoiceOption,
+
   ): Promise<{ success: boolean; audioFilePath?: string; processingTime?: number; duration?: number }> {
     try {
       // Update status to processing
@@ -363,37 +339,29 @@ export class AudioService {
       const startTime = Date.now();
 
       // Generate audio using TTS service
-      const audioFilePath = await this.ttsService.generateAudio(text, voiceStyle);
+      const audioFilePath = await this.ttsService.generateAudio(text, voiceStyle, storyId, chunkIndex);
       
       const processingTime = Date.now() - startTime;
       
       // Get audio duration
       const duration = await this.ttsService.getAudioDuration(audioFilePath);
-
-      // Update audio file path and metadata
-      await this.audioChunkRepository.updateAudioFileByStoryIdAndChunkIndex(
+      // create a new audio chunk
+      const audioChunk = await this.audioChunkRepository.create({
         storyId,
         chunkIndex,
-        audioFilePath,
-      );
-
-      await this.audioChunkRepository.updateMetadataByStoryIdAndChunkIndex(
-        storyId,
-        chunkIndex,
-        {
-          audioFormat: AudioFormat.MP3,
+        audioFile: audioFilePath,
+        status: AudioGenerationStatus.COMPLETED,
+        content: text,
+        metadata: {
+          audioFormat: AudioFormat.WAV,
           processingTime: processingTime,
           quality: 'standard',
           duration: duration,
+          aiModel: 'google-tts',
         },
-      );
+      });
 
-      // Update status to completed
-      await this.audioChunkRepository.updateStatusByStoryIdAndChunkIndex(
-        storyId,
-        chunkIndex,
-        AudioGenerationStatus.COMPLETED,
-      );
+
 
       this.logger.log(`Audio generation completed for story ${storyId}, chunk ${chunkIndex}`);
       
@@ -406,18 +374,15 @@ export class AudioService {
     } catch (error) {
       this.logger.error(`Audio generation failed for story ${storyId}, chunk ${chunkIndex}:`, error);
       
-      // Update status to failed
-      await this.audioChunkRepository.updateStatusByStoryIdAndChunkIndex(
-        storyId,
-        chunkIndex,
-        AudioGenerationStatus.FAILED,
-      );
-
-      await this.audioChunkRepository.updateMetadataByStoryIdAndChunkIndex(
+      // Update status and error in a single operation
+      await this.audioChunkRepository.updateAudioChunkComplete(
         storyId,
         chunkIndex,
         {
-          error: error.message,
+          status: AudioGenerationStatus.FAILED,
+          metadata: {
+            error: error.message,
+          },
         },
       );
 

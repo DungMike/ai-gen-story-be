@@ -81,11 +81,10 @@ export class ImagesService {
       }
 
       // Default configuration
-      console.log("🚀 ~ ImagesService ~ generateImages ~ generateImagesDto.maxWordsPerChunk:", generateImagesDto.maxWordsPerChunk)
       const config = {
         artStyle: 'realistic',
         imageSize: '1024x1024',
-        maxWordsPerChunk: generateImagesDto.maxWordsPerChunk || 200,
+        maxWordsPerChunk: generateImagesDto.maxWordsPerChunk || 500,
         aiModel: 'gemini',
         quality : 'standard'
       };
@@ -208,7 +207,7 @@ export class ImagesService {
 
       // Update story status
       await this.storyRepository.update(storyId, {
-        status: { imagesGenerated: true }
+        status: {  imagesGenerated: true, storyGenerated: true }
       });
 
       // Get processing stats
@@ -228,8 +227,7 @@ export class ImagesService {
         failedImages: stats.failed,
         processingImages: stats.processing,
         pendingImages: stats.pending,
-        progress: 100,
-        images: imageChunks
+        progress: 100
       };
     } catch (error) {
       console.trace(error);

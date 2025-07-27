@@ -11,7 +11,7 @@ export class AudioChunk {
   @Prop({ required: true, min: 0 })
   chunkIndex: number;
 
-  @Prop({ required: true, maxlength: 5000 })
+  @Prop({ required: true})
   content: string;
 
   @Prop({ required: true })

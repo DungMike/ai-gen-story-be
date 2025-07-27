@@ -1,4 +1,4 @@
-import { Exclude, Expose, Type } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class ImageStyleResponseDto {
   @Expose()
@@ -85,5 +85,5 @@ export class ImageProcessingResponseDto {
 
   @Expose()
   @Type(() => ImageChunkResponseDto)
-  images: ImageChunkResponseDto[];
+  images?: ImageChunkResponseDto[];
 } 

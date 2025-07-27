@@ -18,10 +18,10 @@ export class TTSService {
     return await this.apiKeyManager.createGeminiClient();
   }
 
-  async generateAudio(text: string, voiceModel: VoiceOption): Promise<string> {
+  async generateAudio(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number): Promise<string> {
     try {
       this.logger.log(`Generating audio with ${voiceModel}...`);
-        return this.generateGoogleTTS(text, voiceModel);
+        return this.generateGoogleTTS(text, voiceModel, storyId, chunkIndex);
       
     } catch (error) {
       this.logger.error('Error generating audio:', error);
@@ -29,7 +29,7 @@ export class TTSService {
     }
   }
 
-  private async generateGoogleTTS(text: string, voiceModel: VoiceOption): Promise<string> {
+  private async generateGoogleTTS(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number): Promise<string> {
     let currentApiKey: string;
     try {
       // Validate input
@@ -56,58 +56,50 @@ export class TTSService {
       This is the text: ${text}
         `
       // Call Google Gemini TTS API
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: prompt}] }],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: selectedVoice },
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-pro-preview-tts",
+          contents: [{ parts: [{ text: prompt}] }],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice },
+              },
             },
           },
-        },
-      });
-
-      this.logger.log('Audio generated successfully');
-
-      const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        });
+  
+        this.logger.log('Audio generated successfully');
+  
+        const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!data) {
+          throw new Error('No audio data received from Google Gemini TTS');
+        }
+  
+        const audioBuffer = Buffer.from(data, 'base64');
+        
+        // Ensure uploads/audio/storyId/ directory exists
+        const audioDir = path.join('uploads', 'audio', storyId);
+        if (!fs.existsSync(audioDir)) {
+          fs.mkdirSync(audioDir, { recursive: true });
+        }
+        
+        // Generate unique filename
+        const timestamp = Date.now();
+        const audioFilePath = path.join(audioDir, `chunk${chunkIndex}_${timestamp}.wav`);
+        
+        // Save the audio file
+        await this.saveWaveFile(audioFilePath, audioBuffer);
+        
+        this.logger.log(`Audio generated successfully: ${audioFilePath}`);
+        
+        return audioFilePath;
       
-      if (!data) {
-        throw new Error('No audio data received from Google Gemini TTS');
-      }
-
-      const audioBuffer = Buffer.from(data, 'base64');
       
-      // Ensure uploads/audio directory exists
-      const audioDir = path.join(process.cwd(), 'uploads', 'audio');
-      if (!fs.existsSync(audioDir)) {
-        fs.mkdirSync(audioDir, { recursive: true });
-      }
       
-      // Generate unique filename
-      const timestamp = Date.now();
-      const audioFilePath = path.join(audioDir, `temp_${timestamp}.wav`);
-      
-      // Save the audio file
-      await this.saveWaveFile(audioFilePath, audioBuffer);
-      
-      this.logger.log(`Audio generated successfully: ${audioFilePath}`);
-      
-      return audioFilePath;
       
     } catch (error) {
       this.logger.error('Error in Google Gemini TTS:', error);
-      
-      // Mark API key as unhealthy if it's a rate limit or quota error
-      if (currentApiKey && (
-        error.message.includes('quota') || 
-        error.message.includes('rate') ||
-        error.message.includes('limit') ||
-        error.message.includes('429')
-      )) {
-        this.apiKeyManager.markKeyAsUnhealthy(currentApiKey, `TTS Error: ${error.message}`);
-      }
       
       throw new Error(`Google Gemini TTS failed: ${error.message}`);
     }
@@ -174,7 +166,7 @@ export class TTSService {
     return chunks;
   }
 
-  async generateAudioFromChunks(text: string, voiceModel: VoiceOption): Promise<string[]> {
+  async generateAudioFromChunks(text: string, voiceModel: VoiceOption, storyId: string): Promise<string[]> {
     try {
       this.logger.log(`Generating audio from chunks with ${voiceModel}...`);
       
@@ -183,7 +175,7 @@ export class TTSService {
       
       for (let i = 0; i < chunks.length; i++) {
         this.logger.log(`Processing chunk ${i + 1}/${chunks.length}`);
-        const audioFile = await this.generateGoogleTTS(chunks[i], voiceModel);
+        const audioFile = await this.generateGoogleTTS(chunks[i], voiceModel, storyId, i);
         audioFiles.push(audioFile);
       }
       
