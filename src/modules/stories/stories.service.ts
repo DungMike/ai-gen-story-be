@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { StoryRepository } from '@/database/repositories/story.repository';
+import { BatchJobRepository } from '@/database/repositories/batch-job.repository';
 import { GeminiService } from '@/services/ai/gemini.service';
 import { FileUploadService } from '@/services/file/file-upload.service';
 import { FileStorageService } from '@/services/file/file-storage.service';
@@ -9,6 +10,7 @@ import { CreateStoryDto } from './dto/create-story.dto';
 import { StoryResponseDto } from './dto/story-response.dto';
 import { PaginatedResponseDto } from '@/common/dto/pagination.dto';
 import { GenerateStoryDto } from './dto/generate-story.dto';
+import { BatchCreateStoryDto } from './dto/batch-create-story.dto';
 import { UpdateStoryDto } from '@/types';
 import { StoryGateway } from '../socket/story.gateway';
 import { PageOptionDto } from './dto/page-option.dto';
@@ -19,11 +21,14 @@ export class StoriesService {
 
   constructor(
     private readonly storyRepository: StoryRepository,
+    private readonly batchJobRepository: BatchJobRepository,
     private readonly geminiService: GeminiService,
     private readonly fileUploadService: FileUploadService,
     private readonly fileStorageService: FileStorageService,
     private readonly storyGateway: StoryGateway,
     @InjectQueue('story-generation') private storyQueue: Queue,
+    @InjectQueue('batch-stories') private batchStoriesQueue: Queue,
+    @InjectQueue('auto-mode') private autoModeQueue: Queue,
   ) {}
 
   private addFileUrls(story: any): StoryResponseDto {
@@ -99,8 +104,103 @@ export class StoriesService {
     }
   }
 
+  // Updated method to enqueue batch story creation with database tracking
+  async enqueueBatchStoryCreation(
+    batchCreateStoryDto: BatchCreateStoryDto, 
+    userId?: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data: {
+      batchId: string;
+      totalStories: number;
+      autoMode: boolean;
+      jobId: string;
+    };
+  }> {
+    try {
+      // Validate input
+      if (!batchCreateStoryDto.stories || batchCreateStoryDto.stories.length === 0) {
+        throw new Error('No stories provided');
+      }
+
+      if (batchCreateStoryDto.stories.length > 20) {
+        throw new Error('Maximum 10 stories allowed per batch');
+      }
+
+      
+      // Create batch job in database
+      const batchJobData = {
+        userId,
+        status: 'pending',
+        totalFiles: batchCreateStoryDto.stories.length,
+        processedFiles: 0,
+        failedFiles: 0,
+        settings: {
+          autoMode: batchCreateStoryDto.autoMode?.enabled || false,
+          generateAudio: batchCreateStoryDto.autoMode?.generateAudio || false,
+          generateImages: batchCreateStoryDto.autoMode?.generateImages || false,
+          defaultPrompt: batchCreateStoryDto.stories[0]?.customPrompt,
+          customPromptImage: batchCreateStoryDto.autoMode?.customPromptImage,
+          customPromptAudio: batchCreateStoryDto.autoMode?.customPromptAudio,
+          audioSettings: {
+            maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkAudio || 500,
+            voiceModel: 'google-tts'
+          },
+          imageSettings: {
+            artStyle: batchCreateStoryDto.autoMode?.imageStyle || 'realistic',
+            imageSize: '1024x1024',
+            maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkImage || 500
+          }
+        },
+        results: [],
+        progress: {
+          currentFile: 0,
+          currentStep: 'story',
+          percentage: 0
+        }
+      };
+
+      const batchJob = await this.batchJobRepository.create(batchJobData);
+      
+      // Add job to batch queue
+      const job = await this.batchStoriesQueue.add('process-batch-stories', {
+        batchId: batchJob._id,
+        stories: batchCreateStoryDto.stories,
+        autoMode: batchCreateStoryDto.autoMode,
+        userId
+      });
+
+      // Update batch job with job ID
+      await this.batchJobRepository.update(batchJob._id, {
+        status: 'processing',
+        startedAt: new Date()
+      });
+
+      this.logger.log(`Batch story creation job queued. Batch ID: ${batchJob._id}, Job ID: ${job.id}`);
+      
+      return {
+        success: true,
+        message: 'Batch story creation queued successfully',
+        data: {
+          batchId: batchJob._id,
+          totalStories: batchCreateStoryDto.stories.length,
+          autoMode: batchCreateStoryDto.autoMode?.enabled || false,
+          jobId: job.id.toString()
+        }
+      };
+    } catch (error) {
+      this.logger.error('Error queuing batch story creation:', error);
+      throw error;
+    }
+  }
+
   // New method to enqueue story generation job
-  async enqueueStoryGeneration(id: string, generateStoryDto: GenerateStoryDto, userId?: string): Promise<{ message: string; jobId: string }> {
+  async enqueueStoryGeneration(
+    id: string, 
+    generateStoryDto: GenerateStoryDto, 
+    userId?: string
+  ): Promise<{ message: string; jobId: string; autoMode?: boolean }> {
     try {
       const story = await this.storyRepository.findById(id);
       if (!story) {
@@ -111,7 +211,7 @@ export class StoriesService {
       }
 
       // Add job to queue
-      const job = await this.storyQueue.add({ 
+      const job = await this.storyQueue.add('generate-story', { 
         storyId: id, 
         generateStoryDto, 
         userId 
@@ -121,7 +221,8 @@ export class StoriesService {
       
       return { 
         message: 'Story generation job has been queued successfully', 
-        jobId: job.id.toString() 
+        jobId: job.id.toString(),
+        autoMode: generateStoryDto.autoMode?.enabled || false
       };
     } catch (error) {
       this.logger.error('Error queuing story generation:', error);
@@ -246,6 +347,12 @@ export class StoriesService {
         success: true
       });
 
+      // Check if auto mode is enabled and trigger next steps
+      console.log("🚀 ~ StoriesService ~ generateStory ~ generateStoryDto.autoMode?.enabled:", generateStoryDto.autoMode?.enabled)
+      if (generateStoryDto.autoMode?.enabled) {
+        await this.enqueueAutoModePipeline(id, generateStoryDto.autoMode, userId);
+      }
+
       this.logger.log(`Story generated successfully for ID: ${id} - ${wordCount} words in ${processingTime}ms`);
       return this.addFileUrls(updatedStory);
     } catch (error) {
@@ -262,6 +369,97 @@ export class StoriesService {
       });
       
       this.logger.error(`Error generating story for ID: ${id}:`, error);
+      throw error;
+    }
+  }
+
+  // Updated method to enqueue auto mode pipeline
+  private async enqueueAutoModePipeline(storyId: string, autoModeConfig: any, userId?: string) {
+    try {
+      this.logger.log(`Enqueuing auto mode pipeline for story ${storyId}`);
+      
+      // Queue the first step (images)
+      if (autoModeConfig.generateImages) {
+        await this.autoModeQueue.add('process-auto-mode', {
+          storyId,
+          userId,
+          config: autoModeConfig,
+          currentStep: 'images'
+        });
+        
+        this.logger.log(`Auto mode images step queued for story ${storyId}`);
+      } else if (autoModeConfig.generateAudio) {
+        // If no images, start with audio
+        await this.autoModeQueue.add('process-auto-mode', {
+          storyId,
+          userId,
+          config: autoModeConfig,
+          currentStep: 'audio'
+        });
+        
+        this.logger.log(`Auto mode audio step queued for story ${storyId}`);
+      } else if (autoModeConfig.mergeAudio) {
+        // If no audio generation, start with merge
+        await this.autoModeQueue.add('process-auto-mode', {
+          storyId,
+          userId,
+          config: autoModeConfig,
+          currentStep: 'merge'
+        });
+        
+        this.logger.log(`Auto mode merge step queued for story ${storyId}`);
+      }
+      
+    } catch (error) {
+      this.logger.error(`Error enqueuing auto mode pipeline for story ${storyId}:`, error);
+    }
+  }
+
+  // Updated method to get batch status from database
+  async getBatchStatus(batchId: string, userId?: string): Promise<{
+    batchId: string;
+    status: string;
+    totalStories: number;
+    completedStories: number;
+    failedStories: number;
+    progress: number;
+    storyIds: string[];
+    errors: string[];
+  }> {
+    try {
+      const batchJob = await this.batchJobRepository.findById(batchId);
+      
+      if (!batchJob) {
+        throw new Error('Batch job not found');
+      }
+
+      // Check if user has permission to view this batch
+      if (userId && batchJob.userId !== userId) {
+        throw new Error('You are not authorized to view this batch');
+      }
+
+      // Extract story IDs from results
+      const storyIds = batchJob.results
+        .filter(result => result.storyId)
+        .map(result => result.storyId);
+
+      // Extract errors from failed results
+      const errors = batchJob.results
+        .filter(result => result.status === 'failed' && result.error)
+        .map(result => result.error);
+
+      return {
+        batchId: batchJob._id,
+        status: batchJob.status,
+        totalStories: batchJob.totalFiles,
+        completedStories: batchJob.processedFiles,
+        failedStories: batchJob.failedFiles,
+        progress: batchJob.progress.percentage,
+        storyIds,
+        errors
+      };
+    } catch (error) {
+      this.logger.error(`Error getting batch status for batch ${batchId}:`, error);
       throw error;
     }
   }

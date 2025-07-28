@@ -50,6 +50,17 @@ export class AudioChunk {
       duration: {
         type: Number,
         default: 0
+      },
+      mergeInfo: {
+        type: {
+          mergedFilePath: String,
+          totalDuration: Number,
+          fileSize: Number,
+          chunkCount: Number,
+          mergedAt: Date,
+          jobId: String
+        },
+        required: false
       }
     }
   })
@@ -59,6 +70,14 @@ export class AudioChunk {
     processingTime: number;
     quality: string;
     duration: number;
+    mergeInfo?: {
+      mergedFilePath: string;
+      totalDuration: number;
+      fileSize: number;
+      chunkCount: number;
+      mergedAt: Date;
+      jobId: string;
+    };
   };
 }
 

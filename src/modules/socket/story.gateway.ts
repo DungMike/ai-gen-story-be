@@ -1,6 +1,6 @@
-import { 
-  WebSocketGateway, 
-  WebSocketServer, 
+import {
+  WebSocketGateway,
+  WebSocketServer,
   SubscribeMessage,
   ConnectedSocket,
   MessageBody,
@@ -10,6 +10,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { SocketService } from './socket.service';
 import { StoryRepository } from '@/database/repositories/story.repository';
+import { BatchJobRepository } from '@/database/repositories/batch-job.repository';
 import { StoryProcessingData, StoryProgressData, StoryCompleteData, StoryErrorData } from '@/types/socket.types';
 import { WsAuthGuard } from '@/common/guards/ws-auth.guard';
 
@@ -35,6 +36,7 @@ export class StoryGateway implements OnGatewayInit {
   constructor(
     private readonly socketService: SocketService,
     private readonly storyRepository: StoryRepository,
+    private readonly batchJobRepository: BatchJobRepository,
   ) {}
 
   afterInit(server: Server) {
@@ -242,6 +244,26 @@ export class StoryGateway implements OnGatewayInit {
     }
   }
 
+  // batch stories events
+  @SubscribeMessage('batch-stories-status')
+  async handleGetBatchStoriesStatus(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { batchId: string }
+  ) {
+    const { batchId } = data;
+    const batchJob = await this.batchJobRepository.findById(batchId);
+    console.log("🚀 ~ StoryGateway ~ handleGetBatchStoriesStatus ~ batchJob:", batchJob)
+    if (!batchJob) {
+      client.emit('error', { 
+        code: 'BATCH_JOB_NOT_FOUND',
+        message: 'Batch job not found' 
+      });
+      return;
+    }
+    client.emit('batch-stories-status', batchJob);
+    return;
+  }
+
   private async checkStoryPermission(user: any, userId: string): Promise<boolean> {
     try {
       if (!user) {
@@ -359,14 +381,158 @@ export class StoryGateway implements OnGatewayInit {
   }
 
   emitStoryProcessingError(storyId: string, data: StoryErrorData): void {
-    const enhancedData = {
-      ...data,
-      timestamp: new Date(),
-      success: false,
-      retryable: this.isRetryableError(data.error)
-    };
-    this.socketService.emitToRoom(`story-${storyId}`, 'story:processing:error', enhancedData);
-    this.logger.error(`Story processing error: ${storyId} - ${data.error} at step: ${data.step}`);
+    try {
+      this.server.to(`story-${storyId}`).emit('story-processing-error', {
+        storyId,
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted story processing error for story ${storyId}`);
+    } catch (error) {
+      this.logger.error(`Error emitting story processing error for story ${storyId}:`, error);
+    }
+  }
+
+  // New methods for batch stories events
+  emitBatchStoriesStart(batchId: string, data: {
+    batchId: string;
+    totalStories: number;
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`batch-${batchId}`).emit('batch-stories-start', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted batch stories start for batch ${batchId}`);
+    } catch (error) {
+      this.logger.error(`Error emitting batch stories start for batch ${batchId}:`, error);
+    }
+  }
+
+  emitBatchStoriesProgress(batchId: string, data: {
+    batchId: string;
+    currentStory: number;
+    totalStories: number;
+    progress: number;
+    message: string;
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`batch-${batchId}`).emit('batch-stories-progress', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted batch stories progress for batch ${batchId}: ${data.progress}%`);
+    } catch (error) {
+      this.logger.error(`Error emitting batch stories progress for batch ${batchId}:`, error);
+    }
+  }
+
+  emitBatchStoriesComplete(batchId: string, data: {
+    batchId: string;
+    totalStories: number;
+    completedStories: number;
+    failedStories: number;
+    storyIds: string[];
+    errors: string[];
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`batch-${batchId}`).emit('batch-stories-complete', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted batch stories complete for batch ${batchId}: ${data.completedStories}/${data.totalStories} successful`);
+    } catch (error) {
+      this.logger.error(`Error emitting batch stories complete for batch ${batchId}:`, error);
+    }
+  }
+
+  emitBatchStoriesError(batchId: string, data: {
+    batchId: string;
+    error: string;
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`batch-${batchId}`).emit('batch-stories-error', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted batch stories error for batch ${batchId}: ${data.error}`);
+    } catch (error) {
+      this.logger.error(`Error emitting batch stories error for batch ${batchId}:`, error);
+    }
+  }
+
+  // Auto mode events
+  emitAutoModeStart(storyId: string, data: {
+    storyId: string;
+    step: string;
+    config: any;
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`story-${storyId}`).emit('auto-mode-start', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted auto mode start for story ${storyId}, step: ${data.step}`);
+    } catch (error) {
+      this.logger.error(`Error emitting auto mode start for story ${storyId}:`, error);
+    }
+  }
+
+  emitAutoModeProgress(storyId: string, data: {
+    storyId: string;
+    step: string;
+    progress: number;
+    message: string;
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`story-${storyId}`).emit('auto-mode-progress', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted auto mode progress for story ${storyId}, step: ${data.step}, progress: ${data.progress}%`);
+    } catch (error) {
+      this.logger.error(`Error emitting auto mode progress for story ${storyId}:`, error);
+    }
+  }
+
+  emitAutoModeComplete(storyId: string, data: {
+    storyId: string;
+    step: string;
+    completedSteps: string[];
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`story-${storyId}`).emit('auto-mode-complete', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted auto mode complete for story ${storyId}, step: ${data.step}`);
+    } catch (error) {
+      this.logger.error(`Error emitting auto mode complete for story ${storyId}:`, error);
+    }
+  }
+
+  emitAutoModeError(storyId: string, data: {
+    storyId: string;
+    step: string;
+    error: string;
+    timestamp: Date;
+  }): void {
+    try {
+      this.server.to(`story-${storyId}`).emit('auto-mode-error', {
+        ...data,
+        timestamp: new Date()
+      });
+      this.logger.log(`Emitted auto mode error for story ${storyId}, step: ${data.step}, error: ${data.error}`);
+    } catch (error) {
+      this.logger.error(`Error emitting auto mode error for story ${storyId}:`, error);
+    }
   }
 
   private calculateEstimatedTimeRemaining(progress: number): number {

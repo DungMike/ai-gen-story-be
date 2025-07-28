@@ -221,4 +221,86 @@ export class AudioChunkRepository {
       )
       .exec();
   }
+
+  /**
+   * Update merge metadata for a story
+   */
+  async updateMergeMetadata(
+    storyId: string,
+    mergeData: {
+      mergedFilePath: string;
+      totalDuration: number;
+      fileSize: number;
+      chunkCount: number;
+      mergedAt: Date;
+      jobId: string;
+    },
+  ): Promise<void> {
+    // Create or update merge metadata in a separate collection or field
+    // For now, we'll store it in the first chunk's metadata
+    const firstChunk = await this.audioChunkModel
+      .findOne({ storyId: new Types.ObjectId(storyId) })
+      .sort({ chunkIndex: 1 })
+      .exec();
+
+    if (firstChunk) {
+      await this.audioChunkModel
+        .findByIdAndUpdate(
+          firstChunk._id,
+          {
+            $set: {
+              'metadata.mergeInfo': mergeData
+            }
+          }
+        )
+        .exec();
+    }
+  }
+
+  /**
+   * Get merge metadata for a story
+   */
+  async getMergeMetadata(storyId: string): Promise<{
+    mergedFilePath?: string;
+    totalDuration?: number;
+    fileSize?: number;
+    chunkCount?: number;
+    mergedAt?: Date;
+    jobId?: string;
+  } | null> {
+    const firstChunk = await this.audioChunkModel
+      .findOne({ storyId: new Types.ObjectId(storyId) })
+      .sort({ chunkIndex: 1 })
+      .exec();
+
+    return firstChunk?.metadata?.mergeInfo || null;
+  }
+
+  /**
+   * Check if all chunks are ready for merging
+   */
+  async isReadyForMerge(storyId: string): Promise<{
+    ready: boolean;
+    completed: number;
+    total: number;
+    missingChunks: number[];
+  }> {
+    const statusCounts = await this.getStatusCountsByStoryId(storyId);
+    const completedChunks = await this.findCompletedByStoryId(storyId);
+    
+    // Check if all chunks are completed
+    const ready = statusCounts.completed === statusCounts.total && statusCounts.total > 0;
+    
+    // Find missing chunk indices
+    const expectedIndices = Array.from({ length: statusCounts.total }, (_, i) => i);
+    const actualIndices = completedChunks.map(chunk => chunk.chunkIndex);
+    const missingChunks = expectedIndices.filter(index => !actualIndices.includes(index));
+    
+    return {
+      ready,
+      completed: statusCounts.completed,
+      total: statusCounts.total,
+      missingChunks
+    };
+  }
 } 

@@ -18,9 +18,23 @@ import { HelpersModule } from '../../helpers/helpers.module';
     MongooseModule.forFeature([
       { name: ImageChunk.name, schema: ImageChunkSchema }
     ]),
-    BullModule.registerQueue({
-      name: 'image-generation',
-    }),
+    BullModule.registerQueue(
+      {
+        name: 'image-generation',
+      },
+      {
+        name: 'auto-mode',
+        defaultJobOptions: {
+          removeOnComplete: 10,
+          removeOnFail: 5,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000
+          }
+        }
+      }
+    ),
     UsersModule,
     RepositoriesModule,
     AiModule,

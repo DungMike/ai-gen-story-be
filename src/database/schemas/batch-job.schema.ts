@@ -30,8 +30,10 @@ export class BatchJob {
       generateAudio: { type: Boolean, default: true },
       generateImages: { type: Boolean, default: true },
       defaultPrompt: { type: String, maxlength: 2000 },
+      customPromptImage: { type: String, maxlength: 20000 },
+      customPromptAudio: { type: String, maxlength: 20000 },
       audioSettings: {
-        maxWordsPerChunk: { type: Number, default: 100, min: 50, max: 200 },
+        maxWordsPerChunk: { type: Number, default: 100, min: 50, max: 2000 },
         voiceModel: {
           type: String,
           enum: ['google-tts', 'elevenlabs'],
@@ -70,6 +72,8 @@ export class BatchJob {
     generateAudio: boolean;
     generateImages: boolean;
     defaultPrompt?: string;
+    customPromptImage?: string;
+    customPromptAudio?: string;
     audioSettings?: {
       maxWordsPerChunk: number;
       voiceModel: string;
