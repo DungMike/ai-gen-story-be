@@ -1,24 +1,24 @@
-import { 
-  Controller, 
-  Post, 
-  UseInterceptors, 
+import {
+  Controller,
+  Post,
+  UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   HttpStatus,
   HttpCode,
   Request,
   ParseFilePipe,
-  MaxFileSizeValidator,
-  FileTypeValidator
+  MaxFileSizeValidator
 } from '@nestjs/common';
-import { 
-  ApiTags, 
-  ApiOperation, 
-  ApiResponse, 
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
   ApiConsumes,
   ApiBody,
   ApiBearerAuth
 } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { FileUploadService } from '@/services/file/file-upload.service';
 import { Auth } from '@/common/decorators/auth.decorator';
 
@@ -30,7 +30,7 @@ export class FileUploadController {
 
   @Post('upload')
   @Auth()
-  @ApiOperation({ summary: 'Upload a story file' })
+  @ApiOperation({ summary: 'Upload a single story file' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -103,6 +103,110 @@ export class FileUploadController {
       fileName: file.originalname,
       fileSize: file.size,
       filePath: uploadedFilePath
+    };
+  }
+
+  @Post('batch-upload')
+  @Auth()
+  @ApiOperation({ summary: 'Upload multiple story files for batch processing' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['files'],
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary'
+          },
+          description: 'Multiple story files to upload (.txt, .doc, .docx)'
+        }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 201, 
+    description: 'Files uploaded successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        files: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              fileUrl: { type: 'string' },
+              fileName: { type: 'string' },
+              fileSize: { type: 'number' },
+              filePath: { type: 'string' }
+            }
+          }
+        },
+        totalFiles: { type: 'number' },
+        totalSize: { type: 'number' }
+      }
+    }
+  })
+  @ApiResponse({ 
+    status: 400, 
+    description: 'Bad request - invalid files or too many files' 
+  })
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FilesInterceptor('files', 10)) // Limit to 10 files
+  async uploadMultipleFiles(
+    @UploadedFiles(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }), // 10MB per file
+        ],
+        fileIsRequired: true,
+      }),
+    ) files: Express.Multer.File[],
+    @Request() req,
+  ) {
+    // Validate number of files
+    if (!files || files.length === 0) {
+      throw new Error('No files uploaded');
+    }
+
+    if (files.length > 10) {
+      throw new Error('Maximum 10 files allowed per upload');
+    }
+
+    // Manual file type validation for all files
+    const allowedExtensions = ['.txt', '.doc', '.docx'];
+    const baseUrl = process.env.API_BASE_URL || 'http://localhost:3001';
+    
+    const uploadedFiles = [];
+    let totalSize = 0;
+
+    for (const file of files) {
+      const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+      
+      if (!allowedExtensions.includes(fileExtension)) {
+        throw new Error(`Invalid file type for ${file.originalname}. Allowed types: ${allowedExtensions.join(', ')}`);
+      }
+
+      // Upload file
+      const uploadedFilePath = await this.fileUploadService.uploadFile(file, 'uploads/original');
+      const fileUrl = `${baseUrl}/${uploadedFilePath}`;
+      
+      uploadedFiles.push({
+        fileUrl,
+        fileName: file.originalname,
+        fileSize: file.size,
+        filePath: uploadedFilePath
+      });
+
+      totalSize += file.size;
+    }
+
+    return {
+      files: uploadedFiles,
+      totalFiles: uploadedFiles.length,
+      totalSize
     };
   }
 } 

@@ -1,10 +1,11 @@
-import { Multer } from 'multer';
 
 export interface BatchSettings {
   autoMode: boolean;
   generateAudio: boolean;
   generateImages: boolean;
   defaultPrompt?: string;
+  customPromptImage?: string;
+  customPromptAudio?: string;
   audioSettings?: {
     maxWordsPerChunk: number;
     voiceModel: 'google-tts' | 'elevenlabs';

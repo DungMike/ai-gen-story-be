@@ -18,10 +18,10 @@ export class TTSService {
     return await this.apiKeyManager.createGeminiClient();
   }
 
-  async generateAudio(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number): Promise<string> {
+  async generateAudio(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
     try {
       this.logger.log(`Generating audio with ${voiceModel}...`);
-        return this.generateGoogleTTS(text, voiceModel, storyId, chunkIndex);
+        return this.generateGoogleTTS(text, voiceModel, storyId, chunkIndex, customPrompt);
       
     } catch (error) {
       this.logger.error('Error generating audio:', error);
@@ -29,7 +29,7 @@ export class TTSService {
     }
   }
 
-  private async generateGoogleTTS(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number): Promise<string> {
+  private async generateGoogleTTS(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
     let currentApiKey: string;
     try {
       // Validate input
@@ -45,17 +45,20 @@ export class TTSService {
       // Get the API key from the client for error handling
       currentApiKey = (ai as any).apiKey;
 
-      const prompt = `
-      You are a professional voice actor.
-      You are given a text and you need to generate a voice audio for it.
-      You need to generate a voice audio for the text. The tone must be natural, emotional tone.
-      The voice should be professional and engaging.
-      The voice should be clear and easy to understand.
-      The voice should be natural and not robotic.
-      The voice should be consistent and not vary in tone or pitch.
-      This is the text: ${text}
-        `
-      // Call Google Gemini TTS API
+      // Use custom prompt if provided, otherwise use default
+      const basePrompt = customPrompt ? 
+        `${customPrompt}\n\nThis is the text: ${text}` :
+        `You are a professional voice actor.
+        You are given a text and you need to generate a voice audio for it.
+        You need to generate a voice audio for the text. The tone must be natural, emotional tone.
+        The voice should be professional and engaging.
+        The voice should be clear and easy to understand.
+        The voice should be natural and not robotic.
+        The voice should be consistent and not vary in tone or pitch.
+        The voice should be ${customPrompt}
+        This is the text: ${text}`;
+
+      const prompt = basePrompt;
         const response = await ai.models.generateContent({
           model: "gemini-2.5-pro-preview-tts",
           contents: [{ parts: [{ text: prompt}] }],

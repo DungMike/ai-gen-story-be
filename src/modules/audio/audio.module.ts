@@ -5,7 +5,6 @@ import { AudioController } from './audio.controller';
 import { AudioService } from './audio.service';
 import { AudioChunkRepository } from './repositories/audio-chunk.repository';
 import { AudioChunk, AudioChunkSchema } from './schemas/audio-chunk.schema';
-import { AudioGateway } from './audio.gateway';
 import { AudioGenerationProcessor } from './audio.processor';
 import { AudioMergeProcessor } from './audio-merge.processor';
 import { AudioMergerService } from '../../services/audio/audio-merger.service';
@@ -35,6 +34,18 @@ import { SocketModule } from '../socket/socket.module';
             delay: 2000
           }
         }
+      },
+      {
+        name: 'auto-mode',
+        defaultJobOptions: {
+          removeOnComplete: 10,
+          removeOnFail: 5,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000
+          }
+        }
       }
     ),
     AiModule,        // For TTSService
@@ -47,7 +58,6 @@ import { SocketModule } from '../socket/socket.module';
   providers: [
     AudioService,
     AudioChunkRepository,
-    AudioGateway,
     AudioGenerationProcessor,
     AudioMergeProcessor,
     AudioMergerService,

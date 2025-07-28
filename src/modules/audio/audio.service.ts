@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { AudioChunkRepository } from './repositories/audio-chunk.repository';
-import { AudioGateway } from './audio.gateway';
+import { AudioGateway } from '../socket/audio.gateway';
 import { TTSService } from '../../services/ai/tts.service';
 import { FileStorageService } from '../../services/file/file-storage.service';
 import { ZipHelper } from '../../helpers/zip.helper';
@@ -56,6 +56,12 @@ export class AudioService {
         throw new Error('You are not authorized to generate audio for this story');
       }
 
+      // Emit audio generation start event
+      this.audioGateway.emitAudioGenerationStart(storyId, {
+        storyId,
+        totalChunks: 0 // Will be updated when actual generation starts
+      });
+
       // Add job to queue
       const job = await this.audioGenerationQueue.add('generate-audio', { 
         storyId, 
@@ -72,6 +78,13 @@ export class AudioService {
       };
     } catch (error) {
       this.logger.error('Error queuing audio generation:', error);
+      
+      // Emit error event
+      this.audioGateway.emitAudioGenerationError(storyId, {
+        storyId,
+        error: error.message
+      });
+      
       throw error;
     }
   }
@@ -116,7 +129,8 @@ export class AudioService {
     storyId: string,
     voiceModel: 'google-tts' | 'elevenlabs' = 'google-tts',
     voiceStyle: VoiceOption,
-    wordPerChunk: number = 500
+    wordPerChunk: number = 500,
+    customPrompt?: string
   ): Promise<AudioGenerationResponseDto> {
     try {
       this.logger.log(`Starting audio generation for story ${storyId}`);
@@ -135,14 +149,29 @@ export class AudioService {
       const textChunks = await this.ttsService.splitTextIntoChunks(story.generatedContent, wordPerChunk);
       this.logger.log(`Text chunks: ${textChunks.length}`);
 
-      // Create audio chunk records
+      // Emit audio generation start event
+      this.audioGateway.emitAudioGenerationStart(storyId, {
+        storyId,
+        totalChunks: textChunks.length
+      });
+
+      // Create audio chunk records and generate audio
       for (let i = 0; i < textChunks.length; i++) {
-        const chunk = textChunks[i];        
-        await this.generateAudioChunk(storyId, i, chunk, voiceStyle);
+        const chunk = textChunks[i];
+        
+        // Emit progress event for each chunk
+        this.audioGateway.emitAudioGenerationProgress(storyId, {
+          storyId,
+          chunkIndex: i,
+          status: 'processing',
+          progress: Math.round(((i + 1) / textChunks.length) * 100)
+        });
+        
+        await this.generateAudioChunk(storyId, i, chunk, voiceStyle, customPrompt);
       }
 
-      // Notify clients about the start of audio generation
-      await this.audioGateway.notifyAudioGenerationStatus(storyId);
+      // Notify clients about the completion of audio generation
+      await this.audioGateway.notifyAudioGenerationStatus(storyId, textChunks.length);
 
       // Update story status
       await this.storyRepository.update(storyId, {
@@ -155,6 +184,13 @@ export class AudioService {
       };
     } catch (error) {
       this.logger.error(`Error starting audio generation for story ${storyId}:`, error);
+      
+      // Emit error event
+      this.audioGateway.emitAudioGenerationError(storyId, {
+        storyId,
+        error: error.message
+      });
+      
       throw new BadRequestException(`Failed to start audio generation: ${error.message}`);
     }
   }
@@ -337,7 +373,7 @@ export class AudioService {
     chunkIndex: number,
     text: string,
     voiceStyle: VoiceOption,
-
+    customPrompt?: string
   ): Promise<{ success: boolean; audioFilePath?: string; processingTime?: number; duration?: number }> {
     try {
       // Update status to processing
@@ -347,15 +383,22 @@ export class AudioService {
         AudioGenerationStatus.PROCESSING,
       );
 
+      // Emit processing start event for this chunk
+      this.audioGateway.emitAudioProcessingStart(storyId, {
+        storyId,
+        message: `Processing audio chunk ${chunkIndex + 1}`
+      });
+
       const startTime = Date.now();
 
       // Generate audio using TTS service
-      const audioFilePath = await this.ttsService.generateAudio(text, voiceStyle, storyId, chunkIndex);
+      const audioFilePath = await this.ttsService.generateAudio(text, voiceStyle, storyId, chunkIndex, customPrompt);
       
       const processingTime = Date.now() - startTime;
       
       // Get audio duration
       const duration = await this.ttsService.getAudioDuration(audioFilePath);
+      
       // create a new audio chunk
       const audioChunk = await this.audioChunkRepository.create({
         storyId,
@@ -372,7 +415,12 @@ export class AudioService {
         },
       });
 
-
+      // Emit completion event for this chunk
+      this.audioGateway.emitAudioProcessingComplete(storyId, {
+        storyId,
+        audioUrl: audioFilePath,
+        duration: duration
+      });
 
       this.logger.log(`Audio generation completed for story ${storyId}, chunk ${chunkIndex}`);
       
@@ -384,6 +432,12 @@ export class AudioService {
       };
     } catch (error) {
       this.logger.error(`Audio generation failed for story ${storyId}, chunk ${chunkIndex}:`, error);
+      
+      // Emit error event for this chunk
+      this.audioGateway.emitAudioProcessingError(storyId, {
+        storyId,
+        error: `Failed to generate audio for chunk ${chunkIndex}: ${error.message}`
+      });
       
       // Update status and error in a single operation
       await this.audioChunkRepository.updateAudioChunkComplete(
@@ -451,10 +505,26 @@ export class AudioService {
         throw new BadRequestException('No valid audio files found for merge');
       }
 
+      // Emit merge start event
+      this.audioGateway.emitAudioMergeStart(storyId, {
+        storyId,
+        message: `Starting audio merge for ${audioFiles.length} files`
+      });
+
       // Merge audio files
       this.logger.log(`Starting audio merge for story ${storyId} with ${audioFiles.length} files`);
       
       const mergeResult = await this.audioMergerService.mergeAudioFiles(audioFiles, storyId);
+
+      // Emit merge complete event
+      this.audioGateway.emitAudioMergeComplete(storyId, {
+        storyId,
+        outputPath: mergeResult.outputPath,
+        totalDuration: mergeResult.totalDuration,
+        fileSize: mergeResult.fileSize,
+        chunkCount: audioFiles.length,
+        jobId: 'auto-merge'
+      });
 
       // Update merge metadata in database
       await this.audioChunkRepository.updateMergeMetadata(storyId, {
@@ -482,6 +552,14 @@ export class AudioService {
       };
     } catch (error) {
       this.logger.error(`Error downloading merged audio for story ${storyId}:`, error);
+      
+      // Emit merge error event
+      this.audioGateway.emitAudioMergeError(storyId, {
+        storyId,
+        error: error.message,
+        jobId: 'auto-merge'
+      });
+      
       throw new BadRequestException(`Failed to download merged audio: ${error.message}`);
     }
   }

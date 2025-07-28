@@ -2,7 +2,6 @@ export * from './audio.module';
 export * from './audio.service';
 export * from './audio.controller';
 export * from './audio.processor';
-export * from './audio.gateway';
 export * from './repositories/audio-chunk.repository';
 export * from './schemas/audio-chunk.schema';
 export * from './dto/create-audio-chunk.dto';

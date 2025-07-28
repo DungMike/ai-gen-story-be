@@ -3,7 +3,7 @@ import { Job } from 'bull';
 import { Injectable, Logger } from '@nestjs/common';
 import { AudioMergerService } from '../../services/audio/audio-merger.service';
 import { AudioChunkRepository } from './repositories/audio-chunk.repository';
-import { AudioGateway } from './audio.gateway';
+import { AudioGateway } from '../socket/audio.gateway';
 
 export interface AudioMergeJob {
   storyId: string;
