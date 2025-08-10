@@ -31,13 +31,12 @@ export class AudioGenerationProcessor {
 
   @Process('generate-audio')
   async handleAudioGeneration(job: Job<AudioGenerationJob>) {
-    console.log("🚀 ~ AudioGenerationProcessor ~ handleAudioGeneration ~ job.data:", job.data)
     const { storyId, userId, voiceModel, voiceStyle, wordPerChunk, customPrompt, autoModeConfig } = job.data;
     this.logger.log(`Processing audio generation for story ID: ${storyId}`);
     
     try {
       // Create a minimal user object for the service
-      await this.audioService.generateAudioForStory(storyId, voiceModel as 'google-tts' | 'elevenlabs', voiceStyle as VoiceOption, wordPerChunk, customPrompt, autoModeConfig);
+      await this.audioService.generateAudioForStory(storyId, voiceStyle as VoiceOption, wordPerChunk, customPrompt, autoModeConfig);
       this.logger.log(`Audio generation completed for story ID: ${storyId}`);
 
       // Add audio merge job

@@ -155,19 +155,38 @@ export class TTSService {
     return 30; // seconds
   }
 
-  async splitTextIntoChunks(text: string, maxWordsPerChunk: number = 100): Promise<string[]> {
-    const words = text.split(/\s+/);
-    const chunks: string[] = [];
-    
-    for (let i = 0; i < words.length; i += maxWordsPerChunk) {
-      const chunk = words.slice(i, i + maxWordsPerChunk).join(' ');
-      if (chunk.trim()) {
-        chunks.push(chunk.trim());
-      }
+async splitTextIntoChunks(
+  text: string,
+  maxWordsPerChunk: number = 100
+): Promise<string[]> {
+  const words = text.split(/\s+/);
+  const chunks: string[] = [];
+  let i = 0;
+
+  while (i < words.length) {
+    // Cắt chunk tạm thời
+    let end = i + maxWordsPerChunk;
+    if (end > words.length) end = words.length;
+
+    let chunk = words.slice(i, end).join(" ");
+
+    // Nếu từ cuối KHÔNG kết thúc bằng dấu câu thì nối thêm cho đến khi gặp dấu câu hoặc hết text
+    while (
+      end < words.length &&
+      !/[.!?]$/.test(words[end - 1].replace(/["')\]]+$/, "")) // bỏ dấu ngoặc/ký tự đóng sau từ
+    ) {
+      chunk += " " + words[end];
+      end++;
     }
-    
-    return chunks;
+    console.log("🚀 ~ TTSService ~ splitTextIntoChunks ~ chunk:", chunk)
+
+    chunks.push(chunk.trim());
+    i = end;
   }
+
+  return chunks;
+}
+
 
   async generateAudioFromChunks(storyTitle: string, text: string, voiceModel: VoiceOption, storyId: string): Promise<string[]> {
     try {

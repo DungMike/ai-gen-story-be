@@ -127,9 +127,8 @@ export class AudioService {
 
   async generateAudioForStory(
     storyId: string,
-    voiceModel: 'google-tts' | 'elevenlabs' = 'google-tts',
     voiceStyle: VoiceOption,
-    wordPerChunk: number = 500,
+    wordPerChunk: number = 400,
     customPrompt?: string,
     autoModeConfig?: any
   ): Promise<AudioGenerationResponseDto> {
@@ -463,6 +462,7 @@ export class AudioService {
     try {
       // First check if merged file already exists
       const mergeMetadata = await this.audioChunkRepository.getMergeMetadata(storyId);
+      console.log("🚀 ~ AudioService ~ downloadMergedAudio ~ mergeMetadata:", mergeMetadata)
       
       if (mergeMetadata && mergeMetadata.mergedFilePath && fs.existsSync(mergeMetadata.mergedFilePath)) {
         // Merged file exists, return it
