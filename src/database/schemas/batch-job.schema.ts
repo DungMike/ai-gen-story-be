@@ -76,11 +76,12 @@ export class BatchJob {
     customPromptAudio?: string;
     audioSettings?: {
       maxWordsPerChunk: number;
-      voiceModel: string;
+      audioVoice: string;
     };
     imageSettings?: {
       artStyle: string;
       imageSize: string;
+      maxWordsPerChunk: number;
     };
   };
 

@@ -4,20 +4,16 @@ import {
   Post,
   Delete,
   Param,
-  Body,
-  UseGuards,
-  Query,
-  Res,
+  Body, Res,
   HttpStatus,
   HttpException
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { Auth } from '../../common/decorators/auth.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ImagesService } from './images.service';
 import { ImageChunkResponseDto, ImageProcessingResponseDto } from './dto/image-response.dto';
-import { CreateImageChunkDto } from './dto/create-image-chunk.dto';
 import { ZipHelper } from '../../helpers/zip.helper';
 import { GenerateImagesDto } from './dto/generate-image.dto';
 
@@ -103,6 +99,20 @@ export class ImagesController {
     @CurrentUser() user: any
   ): Promise<ImageProcessingResponseDto> {
     return this.imagesService.retryFailedImages(storyId);
+  }
+
+  // retry chunk
+  @Post('retry-chunk/:id')
+  @Auth()
+  @ApiOperation({ summary: 'Retry a specific image chunk' })
+  @ApiParam({ name: 'id', description: 'Image chunk ID' })
+  @ApiResponse({ status: 200, description: 'Image chunk retried successfully', type: ImageChunkResponseDto })
+  @ApiResponse({ status: 404, description: 'Image chunk not found' })
+  async retryImageChunk(
+    @Param('id') id: string,
+    @CurrentUser() user: any
+  ) {
+    return this.imagesService.retryImageChunk(id);
   }
 
   @Delete('chunk/:id')

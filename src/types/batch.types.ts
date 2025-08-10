@@ -8,11 +8,12 @@ export interface BatchSettings {
   customPromptAudio?: string;
   audioSettings?: {
     maxWordsPerChunk: number;
-    voiceModel: 'google-tts' | 'elevenlabs';
+    audioVoice?: string; // Optional, if not provided, a default voice will be used
   };
   imageSettings?: {
     artStyle: 'realistic' | 'anime' | 'comic' | 'watercolor';
     imageSize: '512x512' | '1024x1024';
+    maxWordsPerChunk: number;
   };
 }
 

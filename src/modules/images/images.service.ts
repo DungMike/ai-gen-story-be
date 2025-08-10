@@ -116,21 +116,23 @@ export class ImagesService {
           totalChunks: chunks.length
         });
 
+        const chunkPrompt = await this.aiImageService.generateChunkPrompt(chunk, masterPrompt);
         try {
           console.log('Generating chunk prompt for chunk', i);
           // Generate chunk-specific prompt using master prompt
           this.logger.log(`Generating prompt for chunk ${i + 1}/${chunks.length}...`);
-          this.logger.log(`Chunk content length: ${chunk.length} characters`);
-          const chunkPrompt = await this.aiImageService.generateChunkPrompt(chunk, masterPrompt);
           
-                      // Generate multiple images with retry logic for policy violations
+            // Generate multiple images with retry logic for policy violations
             const imageResult = await this.aiImageService.generateImages(chunkPrompt, {
               size: imageSize,
               quality,
               model: aiModel,
               numberOfImages: 1,
               storyId // Pass storyId for automatic file saving
-            });
+            },
+            i,
+            story.title || `Story_${storyId}`
+          );
 
             this.logger.log(`Generated ${imageResult.totalImages} images for chunk ${i}`);
 
@@ -175,17 +177,13 @@ export class ImagesService {
           this.logger.log(`Successfully generated image for chunk ${i + 1}`);
         } catch (error) {
           console.error(`Error generating image for chunk ${i}:`, error);
-          
-          // Truncate content if too long for database
-          const truncatedContent = chunk.length > 5000 ? chunk.substring(0, 5000) + '...' : chunk;
-          
           // Create failed record with a placeholder image path to satisfy validation
           await this.imageChunkRepository.create({
             storyId,
             chunkIndex: i,
-            content: truncatedContent,
+            content: chunk,
             imageFile: 'failed_generation', // Use placeholder to satisfy required field
-            prompt: `Failed to generate prompt for chunk ${i}`,
+            prompt: chunkPrompt,
             status: 'failed',
             style: { artStyle },
             metadata: {
@@ -251,6 +249,73 @@ export class ImagesService {
     return imageChunks.map(chunk => this.transformToResponseDto(chunk));
   }
 
+  // retryImageChunk
+  async retryImageChunk(id: string) {
+    const imageChunk = await this.imageChunkRepository.findById(id);
+    if (!imageChunk) {
+      throw new NotFoundException('Image chunk not found');
+    }
+
+    // Check if the chunk is already completed
+    if (imageChunk.status === 'completed') {
+      throw new BadRequestException('Image chunk is already completed');
+    }
+
+    // Retry logic using AI service
+    try {
+      const story = await this.storyRepository.findById(Object(imageChunk.storyId));
+      if (!story || !story.generatedContent) {
+        throw new BadRequestException('Story content not found for retry');
+      }
+
+      // Generate master prompt for consistency
+      const masterPrompt = await this.aiImageService.generateMasterPrompt(story.generatedContent, '');
+
+      // Generate new chunk prompt using master prompt
+      const chunkPrompt = await this.aiImageService.generateChunkPrompt(imageChunk.content, masterPrompt);
+      // Ensure the prompt is sanitized
+      const sanitizedPrompt = await this.aiImageService.sanitizePrompt(chunkPrompt);
+      // Use enhanced retry logic from AI service
+      const imageResult = await this.aiImageService.generateImages(sanitizedPrompt, {
+        size: imageChunk.metadata.imageSize,
+        quality: imageChunk.metadata.quality,
+        model: imageChunk.metadata.aiModel,
+        numberOfImages: 1,
+        storyId:  Object(imageChunk.storyId),      
+      },
+      imageChunk.chunkIndex,
+      story.title || `Story_${imageChunk.storyId}`
+    );
+      // Use saved image paths from AI service
+      const savedImagePaths = imageResult.savedImagePaths || [];
+      const primaryImagePath = savedImagePaths[0] || '';
+      if (!primaryImagePath) {
+        throw new BadRequestException('Failed to save primary image after retry');
+      }
+      // Update image chunk with new data
+      await this.imageChunkRepository.update(id, {
+        imageFile: primaryImagePath,
+        prompt: sanitizedPrompt,
+        status: 'completed',
+        style: {
+          ...imageChunk.style,
+          masterPrompt,
+          imageVariants: savedImagePaths.slice(1) // Store additional variants
+        },
+        metadata: {
+          ...imageChunk.metadata,
+          processingTime: Date.now() - (imageChunk as any).createdAt?.getTime() || 0,
+          masterPromptGenerated: true,
+          totalImagesGenerated: imageResult.totalImages
+        }
+      });
+    } catch (error) {
+      console.error(`Error retrying image chunk ${id}:`, error);
+      throw new BadRequestException(`Failed to retry image chunk: ${error.message}`);
+    }
+
+  }
+
   async getImageChunk(id: string): Promise<ImageChunkResponseDto> {
     const imageChunk = await this.imageChunkRepository.findById(id);
     if (!imageChunk) {
@@ -306,7 +371,10 @@ export class ImagesService {
           model: failedImage.metadata.aiModel,
           numberOfImages: 4,
           storyId // Pass storyId for automatic file saving
-        });
+        },
+        failedImage.chunkIndex,
+        story.title || `Story_${storyId}`
+      );
 
         // Use saved image paths from AI service
         const savedImagePaths = imageResult.savedImagePaths || [];

@@ -85,6 +85,14 @@ export class BatchStoriesProcessor {
         const title = storyData.title || `Story ${i + 1}`;
         const customPrompt = storyData.customPrompt;
 
+        // Validate required fields
+        if (!fileUrl) {
+          this.logger.error(`Story ${i + 1} is missing fileUrl`);
+          result.failedStories++;
+          result.errors.push(`Story ${i + 1}: Missing fileUrl`);
+          continue;
+        }
+
         try {
           this.logger.log(`Processing story ${i + 1}/${stories.length} for batch ${batchId}`);
 

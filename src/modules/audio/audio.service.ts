@@ -130,7 +130,8 @@ export class AudioService {
     voiceModel: 'google-tts' | 'elevenlabs' = 'google-tts',
     voiceStyle: VoiceOption,
     wordPerChunk: number = 500,
-    customPrompt?: string
+    customPrompt?: string,
+    autoModeConfig?: any
   ): Promise<AudioGenerationResponseDto> {
     try {
       this.logger.log(`Starting audio generation for story ${storyId}`);
@@ -166,8 +167,8 @@ export class AudioService {
           status: 'processing',
           progress: Math.round(((i + 1) / textChunks.length) * 100)
         });
-        
-        await this.generateAudioChunk(storyId, i, chunk, voiceStyle, customPrompt);
+
+        await this.generateAudioChunk(story.title, storyId, i, chunk, voiceStyle, customPrompt);
       }
 
       // Notify clients about the completion of audio generation
@@ -369,6 +370,7 @@ export class AudioService {
 
 
   async generateAudioChunk(
+    storyTitle: string,
     storyId: string,
     chunkIndex: number,
     text: string,
@@ -392,8 +394,8 @@ export class AudioService {
       const startTime = Date.now();
 
       // Generate audio using TTS service
-      const audioFilePath = await this.ttsService.generateAudio(text, voiceStyle, storyId, chunkIndex, customPrompt);
-      
+      const audioFilePath = await this.ttsService.generateAudio(storyTitle, text, voiceStyle, storyId, chunkIndex, customPrompt);
+
       const processingTime = Date.now() - startTime;
       
       // Get audio duration

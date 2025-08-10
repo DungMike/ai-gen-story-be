@@ -18,18 +18,18 @@ export class TTSService {
     return await this.apiKeyManager.createGeminiClient();
   }
 
-  async generateAudio(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
+  async generateAudio(storyTitle: string, text: string, voiceStyle: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
     try {
-      this.logger.log(`Generating audio with ${voiceModel}...`);
-        return this.generateGoogleTTS(text, voiceModel, storyId, chunkIndex, customPrompt);
-      
+      this.logger.log(`Generating audio with ${voiceStyle}...`);
+      return this.generateGoogleTTS(storyTitle, text, voiceStyle, storyId, chunkIndex, customPrompt);
+
     } catch (error) {
       this.logger.error('Error generating audio:', error);
       throw new Error(`Failed to generate audio: ${error.message}`);
     }
   }
 
-  private async generateGoogleTTS(text: string, voiceModel: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
+  private async generateGoogleTTS(storyTitle: string, text: string, voiceStyle: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
     let currentApiKey: string;
     try {
       // Validate input
@@ -40,7 +40,7 @@ export class TTSService {
       this.logger.log('Using Google Gemini TTS');
       this.logger.log('Generating audio ...');
     
-      const selectedVoice = voiceModel
+      const selectedVoice = voiceStyle
       const ai = await this.getGeminiClient();
       // Get the API key from the client for error handling
       currentApiKey = (ai as any).apiKey;
@@ -82,7 +82,7 @@ export class TTSService {
         const audioBuffer = Buffer.from(data, 'base64');
         
         // Ensure uploads/audio/storyId/ directory exists
-        const audioDir = path.join('uploads', 'audio', storyId);
+        const audioDir = path.join('uploads', `${storyTitle}_${storyId}`, 'audio');
         if (!fs.existsSync(audioDir)) {
           fs.mkdirSync(audioDir, { recursive: true });
         }
@@ -169,7 +169,7 @@ export class TTSService {
     return chunks;
   }
 
-  async generateAudioFromChunks(text: string, voiceModel: VoiceOption, storyId: string): Promise<string[]> {
+  async generateAudioFromChunks(storyTitle: string, text: string, voiceModel: VoiceOption, storyId: string): Promise<string[]> {
     try {
       this.logger.log(`Generating audio from chunks with ${voiceModel}...`);
       
@@ -178,7 +178,7 @@ export class TTSService {
       
       for (let i = 0; i < chunks.length; i++) {
         this.logger.log(`Processing chunk ${i + 1}/${chunks.length}`);
-        const audioFile = await this.generateGoogleTTS(chunks[i], voiceModel, storyId, i);
+        const audioFile = await this.generateGoogleTTS(storyTitle, chunks[i], voiceModel, storyId, i);
         audioFiles.push(audioFile);
       }
       

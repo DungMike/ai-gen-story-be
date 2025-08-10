@@ -38,7 +38,7 @@ export class ImageGenerationProcessor {
       this.logger.log(`Image generation completed for story ID: ${storyId}`);
 
       // Check if we should continue with auto mode pipeline
-      if (autoModeConfig && (autoModeConfig.generateAudio || autoModeConfig.mergeAudio)) {
+      if (autoModeConfig && autoModeConfig.generateAudio) {
         this.logger.log(`Continuing auto mode pipeline for story ${storyId} - queuing audio generation`);
         
         // Queue the next step (audio generation)

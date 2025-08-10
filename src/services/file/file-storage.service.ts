@@ -8,9 +8,10 @@ export class FileStorageService {
   private readonly uploadsDir = 'uploads';
   private readonly imagesDir = 'images';
 
-  async saveImage(storyId: string, fileName: string, imageBuffer: Buffer): Promise<string> {
+  async saveImage(storyId: string, fileName: string, imageBuffer: Buffer, storyTitle: string): Promise<string> {
     try {
-      const storyDir = path.join(this.uploadsDir, this.imagesDir, storyId);
+      const storyDir = path.join(this.uploadsDir, `${storyTitle}_${storyId}`, this.imagesDir);
+      // const storyDir = path.join(this.uploadsDir, this.imagesDir, storyId);
       
       // Create directory if it doesn't exist
       await fs.mkdir(storyDir, { recursive: true });

@@ -78,6 +78,11 @@ export class StoriesService {
       const baseUrl = process.env.API_BASE_URL || 'http://localhost:3001';
       const fileUrl = createStoryDto.fileUrl;
       
+      // Validate fileUrl exists and is a string
+      if (!fileUrl || typeof fileUrl !== 'string') {
+        throw new Error('File URL is required and must be a string');
+      }
+      
       if (!fileUrl.startsWith(`${baseUrl}/uploads/`)) {
         throw new Error('Invalid file URL format');
       }
@@ -145,12 +150,12 @@ export class StoriesService {
           customPromptAudio: batchCreateStoryDto.autoMode?.customPromptAudio,
           audioSettings: {
             maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkAudio || 500,
-            voiceModel: 'google-tts'
+            audioVoice: batchCreateStoryDto.autoMode.audioVoice,
           },
           imageSettings: {
             artStyle: batchCreateStoryDto.autoMode?.imageStyle || 'realistic',
             imageSize: '1024x1024',
-            maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkImage || 500
+            maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkImage || 500,
           }
         },
         results: [],

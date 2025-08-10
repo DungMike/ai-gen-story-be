@@ -268,7 +268,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
    * Generate image with enhanced retry logic
    * Tries up to 3 times with different prompt strategies regardless of error message
    */
-  async generateImage(prompt: string, options: ImageGenerationOptions = {}): Promise<Buffer> {
+  async generateImage(prompt: string, options: ImageGenerationOptions = {}, chunkIndex: number, storyTitle): Promise<Buffer> {
     const {
       size = '1024x1024',
       quality = 'standard',
@@ -282,7 +282,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     // Strategy 1: Original prompt
     try {
       this.logger.log('Attempt 1: Using original prompt');
-      const result = await this.generateImageWithGemini(prompt, options);
+      const result = await this.generateImageWithGemini(prompt, options, chunkIndex, storyTitle);
       return result.images[0]; // Return first image for backward compatibility
     } catch (error) {
       lastError = error;
@@ -293,7 +293,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     try {
       this.logger.log('Attempt 2: Using sanitized prompt');
       const sanitizedPrompt = await this.sanitizePrompt(prompt);
-      const result = await this.generateImageWithGemini(sanitizedPrompt, options);
+      const result = await this.generateImageWithGemini(sanitizedPrompt, options, chunkIndex, storyTitle);
       return result.images[0]; // Return first image for backward compatibility
     } catch (error) {
       lastError = error;
@@ -304,7 +304,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     try {
       this.logger.log('Attempt 3: Using simplified prompt');
       const simplifiedPrompt = await this.simplifyPrompt(prompt);
-      const result = await this.generateImageWithGemini(simplifiedPrompt, options);
+      const result = await this.generateImageWithGemini(simplifiedPrompt, options, chunkIndex, storyTitle);
       return result.images[0]; // Return first image for backward compatibility
     } catch (error) {
       lastError = error;
@@ -320,7 +320,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
    * Generate multiple images with enhanced retry logic
    * Tries up to 3 times with different prompt strategies regardless of error message
    */
-  async generateImages(prompt: string, options: ImageGenerationOptions = {}): Promise<ImageGenerationResult> {
+  async generateImages(prompt: string, options: ImageGenerationOptions = {}, chunkIndex: number, storyTitle: string): Promise<ImageGenerationResult> {
     const {
       size = '1024x1024',
       quality = 'standard',
@@ -334,7 +334,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     // Strategy 1: Original prompt
     try {
       this.logger.log('Attempt 1: Using original prompt');
-      return await this.generateImageWithGemini(prompt, options);
+      return await this.generateImageWithGemini(prompt, options, chunkIndex, storyTitle);
     } catch (error) {
       lastError = error;
       this.logger.warn(`Attempt 1 failed: ${error.message}`);
@@ -344,7 +344,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     try {
       this.logger.log('Attempt 2: Using sanitized prompt');
       const sanitizedPrompt = await this.sanitizePrompt(prompt);
-      return await this.generateImageWithGemini(sanitizedPrompt, options);
+      return await this.generateImageWithGemini(sanitizedPrompt, options, chunkIndex, storyTitle);
     } catch (error) {
       lastError = error;
       this.logger.warn(`Attempt 2 failed: ${error.message}`);
@@ -354,7 +354,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     try {
       this.logger.log('Attempt 3: Using simplified prompt');
       const simplifiedPrompt = await this.simplifyPrompt(prompt);
-      return await this.generateImageWithGemini(simplifiedPrompt, options);
+      return await this.generateImageWithGemini(simplifiedPrompt, options, chunkIndex, storyTitle);
     } catch (error) {
       lastError = error;
       this.logger.warn(`Attempt 3 failed: ${error.message}`);
@@ -365,7 +365,7 @@ Return ONLY the simplified prompt in English, with no other text or explanations
     throw lastError || new Error('All retry attempts failed');
   }
 
-    async generateImageWithGemini(prompt: string, options: ImageGenerationOptions = {}): Promise<ImageGenerationResult> {
+    async generateImageWithGemini(prompt: string, options: ImageGenerationOptions = {}, chunkIndex, storyTitle): Promise<ImageGenerationResult> {
     let currentApiKey: string;
     try {
       const { size = '1024x1024', quality = 'standard', numberOfImages = 1, storyId } = options;
@@ -403,13 +403,14 @@ Return ONLY the simplified prompt in English, with no other text or explanations
           this.logger.log(`Saving ${images.length} images for story ${storyId}...`);
           
           const saveImagePromises = images.map(async (imageBuffer, imgIndex) => {
-            const imageFileName = `generated_variant_${imgIndex}`;
+            const imageFileName = `generated_variant_${chunkIndex}`;
             
             try {
               const imagePath = await this.fileStorageService.saveImage(
                 storyId,
                 imageFileName,
-                imageBuffer
+                imageBuffer,
+                storyTitle
               );
               this.logger.log(`✓ Saved image ${imgIndex + 1}/${images.length}: ${imagePath}`);
               return imagePath;

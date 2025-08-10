@@ -105,8 +105,7 @@ Here is the original story:
         - Make the story more engaging
         - Use language appropriate for the target audience
         - The new story should be the same length as the original story
-        
-        Return only the story content, no title or comments, rewritten story content in English.
+        Return only the story content, no title or comments, rewritten content with language according to the story.
     `;
     
     return basePrompt;
