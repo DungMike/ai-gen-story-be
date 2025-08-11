@@ -1,3 +1,4 @@
+import { VoiceModel } from '@/database/schemas/batch-job.schema';
 
 export interface BatchSettings {
   autoMode: boolean;
@@ -8,7 +9,8 @@ export interface BatchSettings {
   customPromptAudio?: string;
   audioSettings?: {
     maxWordsPerChunk: number;
-    audioVoice?: string; // Optional, if not provided, a default voice will be used
+    audioVoice?: string;
+    modelVoice?: VoiceModel;
   };
   imageSettings?: {
     artStyle: 'realistic' | 'anime' | 'comic' | 'watercolor';

@@ -5,12 +5,14 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { AudioService } from './audio.service';
 import { VoiceOption } from './constant/type';
+import { VoiceModel } from '@/database/schemas/batch-job.schema';
 
 export interface AudioGenerationJob {
   storyId: string;
   userId?: string;
   voiceModel?: string;
   voiceStyle?: string;
+  modelVoice?: VoiceModel;
   wordPerChunk?: number;
   customPrompt?: string;
   autoModeConfig?: {
@@ -31,12 +33,12 @@ export class AudioGenerationProcessor {
 
   @Process('generate-audio')
   async handleAudioGeneration(job: Job<AudioGenerationJob>) {
-    const { storyId, userId, voiceModel, voiceStyle, wordPerChunk, customPrompt, autoModeConfig } = job.data;
+    const { storyId, userId, voiceStyle, modelVoice, wordPerChunk, customPrompt, autoModeConfig } = job.data;
     this.logger.log(`Processing audio generation for story ID: ${storyId}`);
     
     try {
       // Create a minimal user object for the service
-      await this.audioService.generateAudioForStory(storyId, voiceStyle as VoiceOption, wordPerChunk, customPrompt, autoModeConfig);
+      await this.audioService.generateAudioForStory(storyId, voiceStyle as VoiceOption, modelVoice, wordPerChunk, customPrompt, autoModeConfig);
       this.logger.log(`Audio generation completed for story ID: ${storyId}`);
 
       // Add audio merge job

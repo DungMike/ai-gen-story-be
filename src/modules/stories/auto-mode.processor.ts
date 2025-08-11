@@ -151,6 +151,7 @@ export class AutoModeProcessor {
   }
 
   private async processAudioGeneration(storyId: string, config: any, userId?: string): Promise<void> {
+    console.log("🚀 ~ AutoModeProcessor ~ processAudioGeneration ~ config:", config)
     this.logger.log(`Queuing audio generation for story ${storyId}`);
     
     // Emit progress event
@@ -167,6 +168,7 @@ export class AutoModeProcessor {
       storyId,
       userId,
       voiceStyle: config.audioVoice || 'KORE',
+      modelVoice: config.modelVoice,
       wordPerChunk: config.wordPerChunkAudio || 500,
       customPrompt: config.customPromptAudio,
       autoModeConfig: {

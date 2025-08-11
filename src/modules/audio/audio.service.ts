@@ -15,6 +15,7 @@ import { AudioFormat } from './constant/type';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AudioMergerService } from '../../services/audio/audio-merger.service';
+import { VoiceModel } from '@/database/schemas/batch-job.schema';
 
 // Define AudioGenerationStatus enum locally since it's not exported
 enum AudioGenerationStatus {
@@ -128,6 +129,7 @@ export class AudioService {
   async generateAudioForStory(
     storyId: string,
     voiceStyle: VoiceOption,
+    modelVoice: string,
     wordPerChunk: number = 400,
     customPrompt?: string,
     autoModeConfig?: any
@@ -168,7 +170,7 @@ export class AudioService {
           totalChunks: textChunks.length
         });
 
-        await this.generateAudioChunk(story.title, storyId, i, chunk, voiceStyle, customPrompt);
+        await this.generateAudioChunk(story.title, storyId, i, chunk, voiceStyle, modelVoice, customPrompt);
       }
 
       // Notify clients about the completion of audio generation
@@ -375,6 +377,7 @@ export class AudioService {
     chunkIndex: number,
     text: string,
     voiceStyle: VoiceOption,
+    voiceModel: string,
     customPrompt?: string
   ): Promise<{ success: boolean; audioFilePath?: string; processingTime?: number; duration?: number }> {
     try {
@@ -394,7 +397,7 @@ export class AudioService {
       const startTime = Date.now();
 
       // Generate audio using TTS service
-      const audioFilePath = await this.ttsService.generateAudio(storyTitle, text, voiceStyle, storyId, chunkIndex, customPrompt);
+      const audioFilePath = await this.ttsService.generateAudio(storyTitle, text, voiceStyle,voiceModel, storyId, chunkIndex, customPrompt);
 
       const processingTime = Date.now() - startTime;
       
@@ -413,7 +416,7 @@ export class AudioService {
           processingTime: processingTime,
           quality: 'standard',
           duration: duration,
-          aiModel: 'google-tts',
+          aiModel: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS,
         },
       });
 

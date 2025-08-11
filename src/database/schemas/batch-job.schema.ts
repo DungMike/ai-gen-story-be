@@ -3,6 +3,11 @@ import { Document, Types } from 'mongoose';
 
 export type BatchJobDocument = BatchJob & Document;
 
+export enum VoiceModel {
+  GEMINI_2_5_FLASH_PREVIEW_TTS = 'gemini-2.5-flash-preview-tts',
+  GEMINI_2_5_PRO_PREVIEW_TTS = 'gemini-2.5-pro-preview-tts'
+}
+
 @Schema({ timestamps: true })
 export class BatchJob {
   @Prop({ required: true, index: true })
@@ -36,8 +41,8 @@ export class BatchJob {
         maxWordsPerChunk: { type: Number, default: 100, min: 50, max: 2000 },
         voiceModel: {
           type: String,
-          enum: ['google-tts', 'elevenlabs'],
-          default: 'google-tts'
+          enum: VoiceModel,
+          default: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS
         }
       },
       imageSettings: {
@@ -59,7 +64,7 @@ export class BatchJob {
       generateImages: true,
       audioSettings: {
         maxWordsPerChunk: 100,
-        voiceModel: 'google-tts'
+        voiceModel: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS
       },
       imageSettings: {
         artStyle: 'realistic',
@@ -77,6 +82,7 @@ export class BatchJob {
     audioSettings?: {
       maxWordsPerChunk: number;
       audioVoice: string;
+      modelVoice?: string;
     };
     imageSettings?: {
       artStyle: string;

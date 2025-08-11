@@ -1,6 +1,7 @@
 import { IsString, IsNumber, IsOptional, IsEnum, IsObject, ValidateNested, Min, MaxLength, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AudioFormat, VoiceOption } from '../constant/type';
+import { VoiceModel } from '@/database/schemas/batch-job.schema';
 
 export class AudioStyleDto {
 
@@ -29,7 +30,7 @@ export class AudioStyleDto {
 }
 
 export class AudioMetadataDto {
-  @IsEnum(['google-tts', 'elevenlabs'])
+  @IsEnum(VoiceModel)
   aiModel: string;
 
   @IsEnum(AudioFormat)

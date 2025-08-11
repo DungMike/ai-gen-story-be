@@ -1,10 +1,12 @@
+import { VoiceModel } from '@/database/schemas/batch-job.schema';
+
 export interface AudioVoiceSettings {
   speed: number;
   pitch: number;
 }
 
 export interface AudioMetadata {
-  voiceModel: 'google-tts' | 'elevenlabs';
+  voiceModel: VoiceModel;
   language: string;
   processingTime: number;
   voiceSettings: AudioVoiceSettings;
@@ -26,7 +28,7 @@ export interface AudioChunk {
 export interface CreateAudioDto {
   storyId: string;
   maxWordsPerChunk?: number;
-  voiceModel?: 'google-tts' | 'elevenlabs';
+  voiceModel?: VoiceModel;
   voiceSettings?: Partial<AudioVoiceSettings>;
 }
 

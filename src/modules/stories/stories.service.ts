@@ -123,6 +123,7 @@ export class StoriesService {
       jobId: string;
     };
   }> {
+    console.log("🚀 ~ StoriesService ~ enqueueBatchStoryCreation ~ batchCreateStoryDto:", batchCreateStoryDto)
     try {
       // Validate input
       if (!batchCreateStoryDto.stories || batchCreateStoryDto.stories.length === 0) {
@@ -151,8 +152,9 @@ export class StoriesService {
           audioSettings: {
             maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkAudio || 500,
             audioVoice: batchCreateStoryDto.autoMode.audioVoice,
-          },
-          imageSettings: {
+            modelVoice: batchCreateStoryDto.autoMode.modelVoice,
+            },
+            imageSettings: {
             artStyle: batchCreateStoryDto.autoMode?.imageStyle || 'realistic',
             imageSize: '1024x1024',
             maxWordsPerChunk: batchCreateStoryDto.autoMode?.wordPerChunkImage || 500,
@@ -353,7 +355,6 @@ export class StoriesService {
       });
 
       // Check if auto mode is enabled and trigger next steps
-      console.log("🚀 ~ StoriesService ~ generateStory ~ generateStoryDto.autoMode?.enabled:", generateStoryDto.autoMode?.enabled)
       if (generateStoryDto.autoMode?.enabled) {
         await this.enqueueAutoModePipeline(id, generateStoryDto.autoMode, userId);
       }

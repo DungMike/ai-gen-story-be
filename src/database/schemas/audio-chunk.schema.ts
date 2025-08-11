@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { VoiceModel } from './batch-job.schema';
 
 export type AudioChunkDocument = AudioChunk & Document;
 
@@ -34,8 +35,8 @@ export class AudioChunk {
     type: {
       voiceModel: {
         type: String,
-        enum: ['google-tts', 'elevenlabs'],
-        default: 'google-tts'
+        enum: VoiceModel,
+        default: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS
       },
       language: {
         type: String,
@@ -61,7 +62,7 @@ export class AudioChunk {
       }
     },
     default: {
-      voiceModel: 'google-tts',
+      voiceModel: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS,
       language: 'vi-VN',
       processingTime: 0,
       voiceSettings: {

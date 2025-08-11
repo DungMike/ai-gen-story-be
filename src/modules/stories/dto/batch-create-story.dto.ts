@@ -48,6 +48,15 @@ export class AutoModeConfigDto {
   @IsOptional()
   audioVoice?: string;
 
+    @ApiProperty({
+    description: 'Model audio generation voice',
+    example: 'gemini-2.5-flash-preview-tts',
+    default: 'gemini-2.5-flash-preview-tts'
+  })
+  @IsString()
+  @IsOptional()
+  modelVoice?: string;
+
   @ApiProperty({
     description: 'Word per chunk',
     example: 500,

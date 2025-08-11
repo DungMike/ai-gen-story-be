@@ -18,10 +18,10 @@ export class TTSService {
     return await this.apiKeyManager.createGeminiClient();
   }
 
-  async generateAudio(storyTitle: string, text: string, voiceStyle: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
+  async generateAudio(storyTitle: string, text: string, voiceStyle: VoiceOption, voiceModel: string, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
     try {
       this.logger.log(`Generating audio with ${voiceStyle}...`);
-      return this.generateGoogleTTS(storyTitle, text, voiceStyle, storyId, chunkIndex, customPrompt);
+      return this.generateGoogleTTS(storyTitle, text, voiceStyle, voiceModel, storyId, chunkIndex, customPrompt);
 
     } catch (error) {
       this.logger.error('Error generating audio:', error);
@@ -29,7 +29,8 @@ export class TTSService {
     }
   }
 
-  private async generateGoogleTTS(storyTitle: string, text: string, voiceStyle: VoiceOption, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
+  private async generateGoogleTTS(storyTitle: string, text: string, voiceStyle: VoiceOption, voiceModel: string, storyId: string, chunkIndex: number, customPrompt?: string): Promise<string> {
+    console.log("🚀 ~ TTSService ~ generateGoogleTTS ~ voiceModel:", voiceModel)
     let currentApiKey: string;
     try {
       // Validate input
@@ -60,7 +61,7 @@ export class TTSService {
 
       const prompt = basePrompt;
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-pro-preview-tts",
+          model: voiceModel || "gemini-2.5-flash-preview-tts",
           contents: [{ parts: [{ text: prompt}] }],
           config: {
             responseModalities: ['AUDIO'],
@@ -178,7 +179,6 @@ async splitTextIntoChunks(
       chunk += " " + words[end];
       end++;
     }
-    console.log("🚀 ~ TTSService ~ splitTextIntoChunks ~ chunk:", chunk)
 
     chunks.push(chunk.trim());
     i = end;
@@ -197,7 +197,7 @@ async splitTextIntoChunks(
       
       for (let i = 0; i < chunks.length; i++) {
         this.logger.log(`Processing chunk ${i + 1}/${chunks.length}`);
-        const audioFile = await this.generateGoogleTTS(storyTitle, chunks[i], voiceModel, storyId, i);
+        const audioFile = await this.generateGoogleTTS(storyTitle, chunks[i], voiceModel, voiceModel, storyId, i);
         audioFiles.push(audioFile);
       }
       
