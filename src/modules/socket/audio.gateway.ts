@@ -168,9 +168,9 @@ export class AudioGateway implements OnGatewayInit {
     this.logger.log(`Audio generation started: ${storyId}`);
   }
 
-  emitAudioGenerationProgress(storyId: string, data: { storyId: string; chunkIndex: number; status: string; progress: number }): void {
+  emitAudioGenerationProgress(storyId: string, data: { storyId: string; chunkIndex: number; status: string; progress: number, totalChunks: number }): void {
     this.socketService.emitToRoom(`audio-${storyId}`, 'audio:generation:progress', data);
-    this.logger.log(`Audio generation progress: ${storyId} - chunk ${data.chunkIndex}`);
+    this.logger.log(`Audio generation progress: ${storyId} - chunk ${data.chunkIndex}/${data.totalChunks}`);
   }
 
   emitAudioGenerationComplete(storyId: string, data: { storyId: string; audioUrl: string; duration: number }): void {

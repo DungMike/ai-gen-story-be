@@ -164,7 +164,8 @@ export class AudioService {
           storyId,
           chunkIndex: i,
           status: 'processing',
-          progress: Math.round(((i + 1) / textChunks.length) * 100)
+          progress: Math.round(((i + 1) / textChunks.length) * 100),
+          totalChunks: textChunks.length
         });
 
         await this.generateAudioChunk(story.title, storyId, i, chunk, voiceStyle, customPrompt);
