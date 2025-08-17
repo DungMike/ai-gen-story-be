@@ -123,7 +123,6 @@ export class StoriesService {
       jobId: string;
     };
   }> {
-    console.log("🚀 ~ StoriesService ~ enqueueBatchStoryCreation ~ batchCreateStoryDto:", batchCreateStoryDto)
     try {
       // Validate input
       if (!batchCreateStoryDto.stories || batchCreateStoryDto.stories.length === 0) {
@@ -146,6 +145,7 @@ export class StoriesService {
           autoMode: batchCreateStoryDto.autoMode?.enabled || false,
           generateAudio: batchCreateStoryDto.autoMode?.generateAudio || false,
           generateImages: batchCreateStoryDto.autoMode?.generateImages || false,
+          generateStory: batchCreateStoryDto.autoMode?.generateStory || false,
           defaultPrompt: batchCreateStoryDto.stories[0]?.customPrompt,
           customPromptImage: batchCreateStoryDto.autoMode?.customPromptImage,
           customPromptAudio: batchCreateStoryDto.autoMode?.customPromptAudio,
@@ -289,10 +289,16 @@ export class StoriesService {
       });
 
       // Generate story with AI
-      const generatedContent = await this.geminiService.generateStory(
-        originalContent,
-        generateStoryDto?.customPrompt ? generateStoryDto.customPrompt : story.customPrompt
-      );
+      let generatedContent
+      if(generateStoryDto && !generatedContent?.generateStory) {
+        generatedContent = originalContent
+      } else {
+        generatedContent = await this.geminiService.generateStory(
+          originalContent,
+          generateStoryDto?.customPrompt ? generateStoryDto.customPrompt : story.customPrompt
+        );
+      }
+      
 
         if (!generatedContent || generatedContent.trim().length === 0) {
           throw new Error('AI failed to generate story content');

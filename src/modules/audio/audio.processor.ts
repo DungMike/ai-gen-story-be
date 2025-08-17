@@ -42,6 +42,7 @@ export class AudioGenerationProcessor {
       this.logger.log(`Audio generation completed for story ID: ${storyId}`);
 
       // Add audio merge job
+
       await this.audioMergeQueue.add('merge-audio', {
       storyId,
       userId

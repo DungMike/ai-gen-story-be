@@ -16,8 +16,8 @@ export class AudioChunk {
   @Prop({ required: true, maxlength: 20000 })
   content: string;
 
-  @Prop({ required: true })
-  audioFile: string;
+  @Prop({ required: false, default: null })
+  audioFile?: string;
 
   @Prop({
     type: String,

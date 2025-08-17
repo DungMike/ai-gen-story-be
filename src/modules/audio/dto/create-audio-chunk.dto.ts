@@ -73,7 +73,8 @@ export class CreateAudioChunkDto {
   content: string;
 
   @IsString()
-  audioFile: string;
+  @IsOptional()
+  audioFile?: string;
 
 
   @IsOptional()

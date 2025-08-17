@@ -15,7 +15,6 @@ import { AudioFormat } from './constant/type';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AudioMergerService } from '../../services/audio/audio-merger.service';
-import { VoiceModel } from '@/database/schemas/batch-job.schema';
 
 // Define AudioGenerationStatus enum locally since it's not exported
 enum AudioGenerationStatus {
@@ -170,7 +169,7 @@ export class AudioService {
           totalChunks: textChunks.length
         });
 
-        await this.generateAudioChunk(story.title, storyId, i, chunk, voiceStyle, modelVoice, customPrompt);
+        const data = await this.generateAudioChunk(story.title, storyId, i, chunk, voiceStyle, modelVoice, customPrompt);
       }
 
       // Notify clients about the completion of audio generation
@@ -353,8 +352,13 @@ export class AudioService {
       }
 
       // Delete from database
-      await this.audioChunkRepository.removeByStoryId(storyId);
-      
+      const deleteResult = await this.audioChunkRepository.removeByStoryId(storyId);
+
+      // check if the story has a merged audio file
+      const audioChunksNeedDeleted = await this.audioChunkRepository.findByStoryId(storyId);
+     
+
+
       this.logger.log(`Deleted ${audioChunks.length} audio chunks for story ${storyId}`);
     } catch (error) {
       this.logger.error(`Error deleting audio chunks for story ${storyId}:`, error);
@@ -402,23 +406,28 @@ export class AudioService {
       const processingTime = Date.now() - startTime;
       
       // Get audio duration
-      const duration = await this.ttsService.getAudioDuration(audioFilePath);
+      let duration = null;
+      if (audioFilePath) {
+        duration = await this.ttsService.getAudioDuration(audioFilePath);
+      }
+
       
       // create a new audio chunk
-      const audioChunk = await this.audioChunkRepository.create({
+      await this.audioChunkRepository.create({
         storyId,
         chunkIndex,
         audioFile: audioFilePath,
-        status: AudioGenerationStatus.COMPLETED,
+        status: audioFilePath ? AudioGenerationStatus.COMPLETED : AudioGenerationStatus.FAILED,
         content: text,
         metadata: {
           audioFormat: AudioFormat.WAV,
           processingTime: processingTime,
           quality: 'standard',
           duration: duration,
-          aiModel: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS,
+          aiModel: voiceModel,
         },
       });
+
 
       // Emit completion event for this chunk
       this.audioGateway.emitAudioProcessingComplete(storyId, {

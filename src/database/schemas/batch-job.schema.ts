@@ -34,6 +34,7 @@ export class BatchJob {
       autoMode: { type: Boolean, default: true },
       generateAudio: { type: Boolean, default: true },
       generateImages: { type: Boolean, default: true },
+      generateStory: { type: Boolean, default: true },
       defaultPrompt: { type: String, maxlength: 2000 },
       customPromptImage: { type: String, maxlength: 20000 },
       customPromptAudio: { type: String, maxlength: 20000 },
@@ -62,6 +63,7 @@ export class BatchJob {
       autoMode: true,
       generateAudio: true,
       generateImages: true,
+      generateStory: true,
       audioSettings: {
         maxWordsPerChunk: 100,
         voiceModel: VoiceModel.GEMINI_2_5_FLASH_PREVIEW_TTS
@@ -76,6 +78,7 @@ export class BatchJob {
     autoMode: boolean;
     generateAudio: boolean;
     generateImages: boolean;
+    generateStory: boolean;
     defaultPrompt?: string;
     customPromptImage?: string;
     customPromptAudio?: string;

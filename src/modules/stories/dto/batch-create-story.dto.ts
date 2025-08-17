@@ -20,6 +20,10 @@ export class AutoModeConfigDto {
   @IsOptional()
   generateImages?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  generateStory?: boolean;
+
   @ApiProperty({
     description: 'Generate audio automatically',
     example: true,
